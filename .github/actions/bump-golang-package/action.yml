@@ -74,17 +74,20 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
 
-    - name: Ensure release-repo/config/final.yml has name and blobstore (with creds)
+    - name: Ensure release-repo/config/final.yml and private.yml exist
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p release-repo/config
-        {
-          echo "name: cflinuxfs5-release"
-          echo "${{ inputs.private_yml }}"
-        } > release-repo/config/final.yml
+
+        echo "name: cflinuxfs5-release" > release-repo/config/final.yml
+        echo "blobstore:" >> release-repo/config/final.yml
+        echo "  provider: s3" >> release-repo/config/final.yml
+
+        echo "${{ inputs.private_yml }}" > release-repo/config/private.yml
+
         echo "=== release-repo/config/final.yml ==="
-        cat -A release-repo/config/final.yml
+        cat release-repo/config/final.yml
 
     - name: Vendor Golang Package
       id: vendor
