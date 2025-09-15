@@ -1,0 +1,98 @@
+name: 'Create and Publish BOSH Release'
+description: 'Create BOSH release and publish to GitHub'
+
+inputs:
+  stack:
+    description: 'Stack name'
+    required: true
+  version:
+    description: 'Release version'
+    required: true
+  release_repo:
+    description: 'BOSH release repository'
+    required: true
+  bucket_name:
+    description: 'S3 bucket name'
+    required: true
+  default_branch:
+    description: 'Default branch'
+    required: true
+  git_user_name:
+    description: 'Git user name'
+    required: true
+  git_user_email:
+    description: 'Git user email'
+    required: true
+  go_version:
+    description: 'Go version'
+    required: false
+    default: '1.24.6'
+  owner:
+    description: 'Repository owner'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout self
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Checkout release repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.release_repo }}
+        ref: ${{ inputs.default_branch }}
+        path: release
+        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
+        persist-credentials: true
+
+    - name: Download final stack from S3
+      uses: ./.github/actions/download-s3
+      with:
+        stack: ${{ inputs.stack }}
+        version: ${{ inputs.version }}
+        bucket_name: ${{ inputs.bucket_name }}
+        artifact_type: stack
+
+    - name: Create final BOSH release
+      uses: ./.github/actions/create-bosh-release
+      with:
+        release_dir: release
+        stack: ${{ inputs.stack }}
+        version: ${{ inputs.version }}
+        release_name: ${{ inputs.stack }}
+        release_repo: ${{ inputs.release_repo }}
+        go_version: ${{ inputs.go_version }}
+
+    - name: Create BOSH release notes
+      uses: ./.github/actions/create-bosh-release-notes
+      with:
+        stack: ${{ inputs.stack }}
+        version: ${{ inputs.version }}
+
+    - name: Commit and push release repo
+      id: rel_commit
+      uses: ./.github/actions/create-bosh-release-commit
+      with:
+        release_dir: release
+        git_user_name: ${{ inputs.git_user_name }}
+        git_user_email: ${{ inputs.git_user_email }}
+
+    - name: Publish BOSH GitHub Release
+      uses: ./.github/actions/create-gh-release
+      with:
+        github_token: ${{ env.GITHUB_TOKEN }}
+        tag: v${{ inputs.version }}
+        name: v${{ inputs.version }}
+        body_file: release-body/body
+        asset_glob: release-artifacts/*.tgz
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.release_repo }} 
+        target_commitish: ${{ steps.rel_commit.outputs.commit_sha }}

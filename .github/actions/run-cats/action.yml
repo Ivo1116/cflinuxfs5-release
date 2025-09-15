@@ -1,0 +1,168 @@
+name: 'Run CATs'
+description: 'Run Cloud Foundry Acceptance Tests (CATS) on cflinuxfs5 with minimal Go buildpack'
+
+inputs:
+  bbl_state_repo:
+    description: 'Repo holding bbl state (owner/repo)'
+    required: true
+  bbl_state_branch:
+    description: 'Branch of the bbl state repo'
+    required: true
+    default: main
+  env_name:
+    description: 'bbl environment name (state dir under the bbl-state repo)'
+    required: true
+  system_domain:
+    description: 'CF system domain'
+    required: true
+  go_buildpack_path:
+    description: 'Path to the minimal Go buildpack zip'
+    required: true
+  nodes:
+    description: 'Number of parallel test nodes'
+    required: false
+    default: '4'
+  flake_attempts:
+    description: 'Retries for flaky tests'
+    required: false
+    default: '2'
+  timeout:
+    description: 'Test timeout (e.g. 2h)'
+    required: false
+    default: '2h'
+
+outputs:
+  success:
+    description: 'Whether CATs passed'
+    value: ${{ steps.cats.outputs.success }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout CF Acceptance Tests
+      uses: actions/checkout@v4
+      with:
+        repository: cloudfoundry/cf-acceptance-tests
+        ref: develop
+        path: cf-acceptance-tests
+
+    - name: Checkout bbl state repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.bbl_state_repo }}
+        ref: ${{ inputs.bbl_state_branch }}
+        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
+        path: bbl-state
+
+    - name: Setup tools (bbl, bosh, cf, credhub)
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Install BBL
+        wget -O /tmp/bbl https://github.com/cloudfoundry/bosh-bootloader/releases/download/v9.0.36/bbl-v9.0.36_linux_amd64
+        chmod +x /tmp/bbl && sudo mv /tmp/bbl /usr/local/bin/bbl
+
+        # Install BOSH CLI
+        wget -O /tmp/bosh https://github.com/cloudfoundry/bosh-cli/releases/download/v7.4.0/bosh-cli-7.4.0-linux-amd64
+        chmod +x /tmp/bosh && sudo mv /tmp/bosh /usr/local/bin/bosh
+
+        # Install CF CLI
+        wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key | sudo apt-key add -
+        echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
+        sudo apt-get update
+        sudo apt-get install cf8-cli -y
+
+        # Install CredHub CLI
+        wget -O /tmp/credhub.tgz https://github.com/cloudfoundry/credhub-cli/releases/download/2.9.19/credhub-linux-2.9.19.tgz
+        mkdir -p /tmp/credhub-cli
+        tar -xzf /tmp/credhub.tgz -C /tmp/credhub-cli
+        sudo mv /tmp/credhub-cli/credhub /usr/local/bin/credhub
+
+    - name: Extract CF admin password from CredHub
+      id: creds
+      shell: bash
+      run: |
+        set -euo pipefail
+        BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
+
+        eval "$(bbl print-env --state-dir "$BBL_STATE_DIR")"
+
+        DIRECTOR_NAME=$(jq -r .bosh.directorName "$BBL_STATE_DIR/bbl-state.json")
+
+        ADMIN_PASS=$(credhub get -n "/${DIRECTOR_NAME}/cf/cf_admin_password" -q)
+
+        echo "::add-mask::$ADMIN_PASS"
+        echo "admin_password=$ADMIN_PASS" >> $GITHUB_OUTPUT
+
+    - name: Login to CF
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf login -a "https://api.${{ inputs.system_domain }}" \
+          --skip-ssl-validation \
+          -u admin \
+          -p "${{ steps.creds.outputs.admin_password }}"
+
+    - name: Upload minimal Go buildpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf delete-buildpack go_buildpack_fs5 -f || true
+        cf create-buildpack go_buildpack_fs5 "${{ inputs.go_buildpack_path }}" 1
+        cf update-buildpack go_buildpack_fs5 --assign-stack cflinuxfs5
+
+    - name: Create CATS config
+      id: config
+      shell: bash
+      run: |
+        set -euo pipefail
+        CONFIG_FILE=$(mktemp)
+        cat > $CONFIG_FILE <<EOF
+        {
+          "api": "api.${{ inputs.system_domain }}",
+          "apps_domain": "${{ inputs.system_domain }}",
+          "admin_user": "admin",
+          "admin_password": "${{ steps.creds.outputs.admin_password }}",
+          "skip_ssl_validation": true,
+          "use_existing_organization": false,
+          "use_existing_space": false,
+          "include_apps": true,
+          "include_detect": true,
+          "include_backend_compatibility": false,
+          "include_docker": false,
+          "include_internet_dependent": false,
+          "include_route_services": false,
+          "include_routing": false,
+          "include_security_groups": false,
+          "include_services": false,
+          "include_ssh": false,
+          "include_sso": false,
+          "include_tasks": false,
+          "include_v3": false,
+          "skip_diego_unsupported_tests": true,
+          "skip_go": false,
+          "skip_node": true,
+          "skip_java": true,
+          "skip_ruby": true,
+          "skip_python": true,
+          "skip_php": true,
+          "skip_dotnet": true,
+          "skip_staticfile": true
+        }
+        EOF
+        echo "config=$CONFIG_FILE" >> $GITHUB_OUTPUT
+
+    - name: Run CATs
+      id: cats
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd cf-acceptance-tests
+        export CONFIG=${{ steps.config.outputs.config }}
+        ./bin/test \
+          --nodes="${{ inputs.nodes }}" \
+          --flake-attempts=${{ inputs.flake_attempts }} \
+          --timeout="${{ inputs.timeout }}" \
+          --no-color
+        echo "success=true" >> "$GITHUB_OUTPUT"

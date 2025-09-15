@@ -1,0 +1,96 @@
+name: 'Upload to GitHub'
+description: 'Create GitHub release and upload artifacts'
+
+inputs:
+  stack:
+    description: 'Stack name'
+    required: true
+  version:
+    description: 'Release version'
+    required: true
+  previous_version:
+    description: 'Previous version for diff'
+    required: false
+  bucket_name:
+    description: 'S3 bucket name'
+    required: true
+  github_token:
+    description: 'GitHub token'
+    required: true
+  owner:
+    description: 'Repository owner'
+    required: true
+  repo:
+    description: 'Repository name'
+    required: true
+  include_receipt:
+    description: 'Include receipt file in release'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout self
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Download final stack from S3
+      uses: ./.github/actions/download-s3
+      with:
+        stack: ${{ inputs.stack }}
+        version: ${{ inputs.version }}
+        bucket_name: ${{ inputs.bucket_name }}
+        artifact_type: stack
+
+    - name: Download final receipt from S3
+      if: inputs.include_receipt == 'true'
+      uses: ./.github/actions/download-s3
+      with:
+        stack: ${{ inputs.stack }}
+        version: ${{ inputs.version }}
+        bucket_name: ${{ inputs.bucket_name }}
+        artifact_type: receipt
+
+    - name: Generate release notes
+      uses: ./.github/actions/generate-release-notes
+      with:
+        stack: ${{ inputs.stack }}
+        current_version: ${{ inputs.version }}
+        previous_version: ${{ inputs.previous_version }}
+
+    - name: Prepare release assets
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p release-assets
+        
+        # Always include stack tarball
+        cp rootfs-artifacts/${{ inputs.stack }}-*.tar.gz release-assets/
+        
+        # Include receipt if requested
+        if [[ "${{ inputs.include_receipt }}" == "true" ]]; then
+          if [[ -f receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} ]]; then
+            cp receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} release-assets/
+          fi
+        fi
+        
+        echo "Release assets prepared:"
+        ls -la release-assets/
+
+    - name: Create GitHub Release
+      uses: ./.github/actions/create-gh-release
+      with:
+        github_token: ${{ inputs.github_token }}
+        tag: ${{ inputs.version }}
+        name: ${{ inputs.version }}
+        body_file: release-body/body
+        asset_glob: release-assets/*
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}

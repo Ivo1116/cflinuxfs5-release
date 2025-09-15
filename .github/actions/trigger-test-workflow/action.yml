@@ -1,0 +1,27 @@
+name: 'Trigger Test Workflow'
+description: 'Dispatch repository event to trigger test workflow'
+
+inputs:
+  github_token:
+    description: 'GitHub token'
+    required: true
+  version:
+    description: 'Version to test'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Dispatch Test Workflow
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ inputs.github_token }}
+        repository: ${{ github.repository }}
+        event-type: rootfs-build-completed
+        client-payload: |
+          {
+            "version": "${{ inputs.version }}",
+            "skip_cleanup": "true",
+            "skip_setup": "true",
+            "skip_deploy": "true"
+          }
