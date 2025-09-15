@@ -75,17 +75,28 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
 
-    - name: Ensure release-repo/config/final.yml has name and blobstore
+    - name: Ensure release-repo/config/final.yml has release name only
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p release-repo/config
-        {
-          echo "name: cflinuxfs5-release"
-          echo "${{ inputs.private_yml }}"
-        } > release-repo/config/final.yml
+
+        echo "name: cflinuxfs5-release" > release-repo/config/final.yml
         echo "=== release-repo/config/final.yml ==="
         cat -A release-repo/config/final.yml
+
+    - name: Write blobstore credentials to private.yml
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p release-repo/config
+
+        cat > release-repo/config/private.yml <<'EOF'
+        ${{ inputs.private_yml }}
+        EOF
+
+        echo "=== release-repo/config/private.yml (redacted) ==="
+        head -5 release-repo/config/private.yml || true
 
     - name: Vendor Golang Package
       id: vendor
