@@ -84,6 +84,13 @@ runs:
         STACK="${{ inputs.stack }}"
         VERSION="${{ inputs.version }}"
         GO_VERSION="${{ inputs.go_version }}"
+        REL_REPO=${{ inputs.release-repo }}
+
+        echo "STACK=$STACK"
+        echo "VERSION=$VERSION"
+        echo "GO_VERSION=$GO_VERSION"
+        echo "PWD=$(pwd)"
+        echo "REL_REPO=$REL_REPO"
 
         cd release-repo
 
