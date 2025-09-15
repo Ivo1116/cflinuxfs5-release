@@ -99,6 +99,9 @@ jobs:
       should_build: ${{ steps.decide.outputs.should_build }}
       trigger_reason: ${{ steps.decide.outputs.reason }}
     steps:
+      - name: Checkout self
+        uses: actions/checkout@v4
+
       - name: Decide if build is needed
         id: decide
         uses: ./.github/actions/determine-build-needed
@@ -118,6 +121,9 @@ jobs:
       previous-version: ${{ steps.previous-release.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Checkout self
+        uses: actions/checkout@v4
+
       - name: Log build reason
         uses: ./.github/actions/log-build-reason
         with:
@@ -178,6 +184,9 @@ jobs:
     needs: [check-new-cves, bump-golang-package, determine-build-needed, gather-resources, build-and-process]
     if: always()
     steps:
+      - name: Checkout self
+        uses: actions/checkout@v4
+
       - name: Generate build summary
         uses: ./.github/actions/generate-build-summary
         with:
