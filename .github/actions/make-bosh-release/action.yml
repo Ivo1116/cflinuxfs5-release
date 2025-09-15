@@ -84,7 +84,7 @@ runs:
         STACK="${{ inputs.stack }}"
         VERSION="${{ inputs.version }}"
         GO_VERSION="${{ inputs.go_version }}"
-        REL_REPO=${{ inputs.release-repo }}
+        REL_REPO=${{ inputs.release_repo }}
 
         echo "STACK=$STACK"
         echo "VERSION=$VERSION"
@@ -93,6 +93,8 @@ runs:
         echo "REL_REPO=$REL_REPO"
 
         cd release-repo
+
+        ls
 
         bosh vendor-package golang-1-linux ../bosh-package-golang-release
 
