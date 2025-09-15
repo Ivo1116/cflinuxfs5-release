@@ -62,6 +62,20 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
 
+    - name: Write private.yml
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p release-repo/config
+        cat > release-repo/config/private.yml <<EOF
+        blobstore:
+          provider: s3
+          options:
+            bucket_name: ${BUCKET_NAME}
+            access_key_id: ${AWS_ACCESS_KEY_ID}
+            secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+        EOF
+
     - name: Build BOSH release
       id: build
       shell: bash
