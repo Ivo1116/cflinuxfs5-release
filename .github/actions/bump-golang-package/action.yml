@@ -50,7 +50,7 @@ runs:
       with:
         repository: ${{ inputs.cflinuxfs_release_repo }}
         ref: ${{ inputs.cflinuxfs_release_ref }}
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
+        ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
         path: release-repo
 
     - name: Checkout bosh-package-golang-release
@@ -58,7 +58,6 @@ runs:
       with:
         repository: ${{ inputs.golang_release_repo }}
         ref: ${{ inputs.golang_release_ref }}
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
         path: golang-release
 
     - name: Set up Git

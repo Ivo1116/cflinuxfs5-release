@@ -58,7 +58,6 @@ runs:
         repository: cloudfoundry/public-buildpacks-ci-robots
         ref: main
         path: new-cves
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
 
     - name: Checkout buildpacks-ci
       uses: actions/checkout@v4
@@ -66,7 +65,6 @@ runs:
         repository: ${{ inputs.buildpacks_ci_repo }}
         ref: master
         path: buildpacks-ci
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
 
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1

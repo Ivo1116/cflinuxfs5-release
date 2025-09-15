@@ -51,6 +51,7 @@ runs:
         repository: ${{ inputs.release_repo }}
         ref: main
         path: ${{ inputs.release_dir }}
+        ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 
     - name: Checkout bosh-package-golang-release
       uses: actions/checkout@v4
