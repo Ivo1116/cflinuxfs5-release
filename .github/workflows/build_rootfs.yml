@@ -175,7 +175,7 @@ jobs:
         if: success()
         uses: ./.github/actions/trigger-test-workflow
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
           version: ${{ needs.gather-resources.outputs.version }}
 
   build-summary:
