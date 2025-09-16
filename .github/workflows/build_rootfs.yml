@@ -30,7 +30,7 @@ env:
   VERSION_FORMAT: minor
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 defaults:
@@ -175,7 +175,7 @@ jobs:
         if: success()
         uses: ./.github/actions/trigger-test-workflow
         with:
-          github_token: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ needs.gather-resources.outputs.version }}
 
   build-summary:
