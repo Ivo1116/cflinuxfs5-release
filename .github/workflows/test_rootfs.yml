@@ -59,6 +59,9 @@ jobs:
       skip_deploy: ${{ steps.set-vars.outputs.skip_deploy }}
       skip_cats: ${{ steps.set-vars.outputs.skip_cats }}
     steps:
+      - name: Checkout self
+        uses: actions/checkout@v4
+
       - name: Normalize inputs
         id: set-vars
         uses: ./.github/actions/normalize-test-inputs
