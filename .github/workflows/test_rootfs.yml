@@ -41,7 +41,7 @@ env:
   BBL_UP_DELAY_SECONDS: 30
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 defaults:
