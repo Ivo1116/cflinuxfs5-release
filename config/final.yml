@@ -1,3 +1,8 @@
-name: cflinuxfs5-release
+---
+name: cflinuxfs5
 blobstore:
   provider: s3
+  options:
+    bucket_name: cflinuxfs5test
+    region: us-east-1
+    credentials_source: env_or_profile
