@@ -30,6 +30,10 @@ inputs:
   owner:
     description: 'Repository owner'
     required: true
+  github_token:
+    description: 'Release token'
+    required: true
+
 
 runs:
   using: 'composite'
@@ -101,7 +105,7 @@ runs:
     - name: Publish BOSH GitHub Release
       uses: ./.github/actions/create-gh-release
       with:
-        github_token: ${{ env.GITHUB_TOKEN }}
+        github_token: ${{ inputs.github_token }}
         tag: v${{ inputs.version }}
         name: v${{ inputs.version }}
         body_file: release-body/body
