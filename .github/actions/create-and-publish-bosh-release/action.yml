@@ -51,7 +51,7 @@ runs:
     - name: Checkout release repo
       uses: actions/checkout@v4
       with:
-        repository: ${{ inputs.release_repo }}
+        repository: ${{ inputs.owner }}/${{ inputs.release_repo }}
         ref: ${{ inputs.default_branch }}
         path: release
         ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
