@@ -80,9 +80,20 @@ runs:
         set -euo pipefail
         mkdir -p release-repo/config
 
-        echo "name: cflinuxfs5-release" > release-repo/config/final.yml
-        echo "blobstore:" >> release-repo/config/final.yml
-        echo "  provider: s3" >> release-repo/config/final.yml
+        if [[ ! -f release-repo/config/final.yml ]]; then
+          echo "Creating default config/final.yml..."
+          {
+            echo "name: cflinuxfs5-release"
+            echo "blobstore:"
+            echo "  provider: s3"
+            echo "  options:"
+            echo "    bucket_name: ${BUCKET_NAME:-cflinuxfs5test}"
+            echo "    region: us-east-1"
+            echo "    credentials_source: env_or_profile"
+          } > release-repo/config/final.yml
+        else
+          echo "Preserving existing config/final.yml"
+        fi
 
         echo "${{ inputs.private_yml }}" > release-repo/config/private.yml
 
@@ -116,7 +127,7 @@ runs:
         done
 
         # also write private.yml
-        echo "$PRIVATE_YML" >config/private.yml
+        echo "$PRIVATE_YML" > config/private.yml
 
         # ensure golang-release has a final.yml
         mkdir -p "$GOLANG_RELEASE_ABS/config"
