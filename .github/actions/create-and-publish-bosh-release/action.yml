@@ -61,6 +61,19 @@ runs:
         bucket_name: ${{ inputs.bucket_name }}
         artifact_type: stack
 
+    - name: Configure BOSH blobstore
+      shell: bash
+      run: |
+        mkdir -p release/config
+        cat > release/config/private.yml <<EOF
+        blobstore:
+          provider: s3
+          options:
+            bucket_name: ${{ inputs.bucket_name }}
+            access_key_id: ${AWS_ACCESS_KEY_ID}
+            secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+        EOF
+
     - name: Create final BOSH release
       uses: ./.github/actions/create-bosh-release
       with:

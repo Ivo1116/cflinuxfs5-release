@@ -157,7 +157,7 @@ jobs:
           version: ${{ needs.release-rootfs-repo.outputs.final_version }}
           previous_version: ${{ needs.resolve-inputs.outputs.previous_tag }}
           bucket_name: ${{ env.BUCKET_NAME }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
           owner: ${{ github.repository_owner }}
           repo: ${{ env.STACK }}
           include_receipt: 'true'
