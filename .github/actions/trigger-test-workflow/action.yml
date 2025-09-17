@@ -23,5 +23,6 @@ runs:
             "version": "${{ inputs.version }}",
             "skip_cleanup": "true",
             "skip_setup": "true",
-            "skip_deploy": "true"
+            "skip_deploy": "true",
+            "skip_cats": "true"
           }
