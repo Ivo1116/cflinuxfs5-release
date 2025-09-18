@@ -105,7 +105,7 @@ runs:
       shell: bash
       run: |
         if [[ "${{ steps.check.outputs.success }}" == "true" ]]; then
-          echo "✅ Race condition check passed - safe to proceed with release"
+          echo "Race condition check passed - safe to proceed with release"
         else
-          echo "❌ Race condition detected - blocking release"
+          echo "Race condition detected - blocking release"
         fi

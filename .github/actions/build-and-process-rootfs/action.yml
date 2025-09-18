@@ -61,12 +61,14 @@ runs:
         previous_version: ${{ inputs.previous_version }}
 
     - name: Build cflinuxfs5 BOSH release
-      uses: ./.github/actions/make-bosh-release
+      uses: ./.github/actions/create-bosh-release
       with:
         stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
+        release_name: ${{ inputs.stack }}
         release_repo: ${{ inputs.release_repo }}
         go_version: ${{ inputs.go_version }}
+        final: false
 
     - name: Upload stack to S3
       uses: ./.github/actions/upload-s3

@@ -74,31 +74,13 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
 
-    - name: Ensure release-repo/config/final.yml and private.yml exist
+    - name: Create private.yml
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p release-repo/config
 
-        if [[ ! -f release-repo/config/final.yml ]]; then
-          echo "Creating default config/final.yml..."
-          {
-            echo "name: cflinuxfs5-release"
-            echo "blobstore:"
-            echo "  provider: s3"
-            echo "  options:"
-            echo "    bucket_name: ${BUCKET_NAME:-cflinuxfs5test}"
-            echo "    region: us-east-1"
-            echo "    credentials_source: env_or_profile"
-          } > release-repo/config/final.yml
-        else
-          echo "Preserving existing config/final.yml"
-        fi
-
         echo "${{ inputs.private_yml }}" > release-repo/config/private.yml
-
-        echo "=== release-repo/config/final.yml ==="
-        cat release-repo/config/final.yml
 
     - name: Vendor Golang Package
       id: vendor
@@ -121,15 +103,12 @@ runs:
         git config user.name "$GIT_USER_NAME"
         git config user.email "$GIT_USER_EMAIL"
 
-        # remove requested packages
         for package_to_remove in $(echo "$PACKAGES_TO_REMOVE" | jq -r '.[]'); do
           rm -rf "packages/$package_to_remove"
         done
 
-        # also write private.yml
         echo "$PRIVATE_YML" > config/private.yml
 
-        # ensure golang-release has a final.yml
         mkdir -p "$GOLANG_RELEASE_ABS/config"
         if ! grep -q '^name:' "$GOLANG_RELEASE_ABS/config/final.yml" 2>/dev/null; then
           echo "name: bosh-package-golang-release" > "$GOLANG_RELEASE_ABS/config/final.yml"
@@ -137,7 +116,6 @@ runs:
         echo "=== $GOLANG_RELEASE_ABS/config/final.yml ==="
         cat -A "$GOLANG_RELEASE_ABS/config/final.yml"
 
-        # create a throw-away release to vendor
         pushd "$GOLANG_RELEASE_ABS"
         bosh create-release --force --tarball=tmp.tgz
         rm tmp.tgz

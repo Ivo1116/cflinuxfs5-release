@@ -71,10 +71,8 @@ runs:
         set -euo pipefail
         mkdir -p release-assets
         
-        # Always include stack tarball
         cp rootfs-artifacts/${{ inputs.stack }}-*.tar.gz release-assets/
         
-        # Include receipt if requested
         if [[ "${{ inputs.include_receipt }}" == "true" ]]; then
           if [[ -f receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} ]]; then
             cp receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} release-assets/

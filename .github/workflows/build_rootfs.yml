@@ -27,6 +27,7 @@ env:
   GOLANG_RELEASE_REPO: cloudfoundry/bosh-package-golang-release
   CVE_UBUNTU_VERSION: Ubuntu 24.04
   CVE_UBUNTU_CODENAME: ubuntu24.04
+  GOLANG_VERSION: 1.24.6
   VERSION_FORMAT: minor
 
 permissions:
@@ -164,7 +165,7 @@ jobs:
           bucket_name: ${{ env.BUCKET_NAME }}
           release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_repo: ${{ env.ROOTFS_REPO }}
-          go_version: 1.24.6
+          go_version: ${{ env.GOLANG_VERSION }}
         env:
           AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}

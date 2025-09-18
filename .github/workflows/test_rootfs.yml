@@ -34,7 +34,8 @@ env:
   DEFAULT_BRANCH: main
   CFLINUXFS5_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
   BUILDPACKS_ENVS_REPO: ivo1116/buildpacks-envs
-  TEST_REPO: Ivo1116/test
+  OPS_FILE_REPO: ivo1116/test
+  OPS_FILE: use-cflinuxfs5.yml
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SYSTEM_DOMAIN: sisle.org
   GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kP2Krc1zMlz8FK1kCfneWqoL2SRvN46pVutrZi
@@ -128,6 +129,8 @@ jobs:
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
           system_domain: ${{ env.SYSTEM_DOMAIN }}
           bucket_name: ${{ env.BUCKET_NAME }}
+          ops_file_repo: ${{ env.OPS_FILE_REPO }}
+          ops_file: ${{ env.OPS_FILE }}
         env:
           GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
           BUILDPACKS_ENVS_DEPLOY_KEY: ${{ secrets.BUILDPACKS_ENVS_DEPLOY_KEY }}
