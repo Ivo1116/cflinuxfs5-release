@@ -6,7 +6,7 @@ inputs:
     description: 'Stack name (e.g., cflinuxfs5)'
     required: true
   bucket_name:
-    description: 'Bucket name (e.g., cflinuxfs5)'
+    description: 'S3 bucket name'
     required: true
   version:
     description: 'Version number (e.g., 1.0.0 or 1.0.0-rc.1)'
@@ -71,7 +71,6 @@ runs:
     - name: Install bosh CLI
       shell: bash
       run: |
-        set -euo pipefail
         VERSION="${{ inputs.bosh_cli_version }}"
         wget -O /tmp/bosh "https://github.com/cloudfoundry/bosh-cli/releases/download/v${VERSION}/bosh-cli-${VERSION}-linux-amd64"
         chmod +x /tmp/bosh
@@ -91,23 +90,8 @@ runs:
             secret_access_key: ${{ env.AWS_SECRET_ACCESS_KEY }}
         EOF
 
-    - name: Check if release already exists
-      id: check-release
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "${{ inputs.release_dir }}"
-        if [[ -f "releases/${{ inputs.release_name }}/${{ inputs.release_name }}-${{ inputs.version }}.yml" ]]; then
-          echo "exists=true" >> $GITHUB_OUTPUT
-          echo "release_tarball=../release-artifacts/${{ inputs.release_name }}-${{ inputs.version }}.tgz" >> $GITHUB_OUTPUT
-          echo "Release ${{ inputs.release_name }}/${{ inputs.version }} already exists in repo. Skipping."
-        else
-          echo "exists=false" >> $GITHUB_OUTPUT
-        fi
-
     - name: Build BOSH release
       id: build
-      if: steps.check-release.outputs.exists == 'false'
       shell: bash
       run: |
         set -euo pipefail
@@ -123,13 +107,10 @@ runs:
         GO_BLOB_DIR="blobs/golang-1-linux"
         GO_BLOB_FILE="go${GO_VERSION}.linux-amd64.tar.gz"
         mkdir -p "${GO_BLOB_DIR}"
-
         if [[ ! -f "${GO_BLOB_DIR}/${GO_BLOB_FILE}" ]]; then
-          echo "Downloading Go ${GO_VERSION} blob from go.dev..."
+          echo "Downloading Go ${GO_VERSION} blob..."
           curl -L "https://go.dev/dl/${GO_BLOB_FILE}" -o "${GO_BLOB_DIR}/${GO_BLOB_FILE}"
           bosh add-blob "${GO_BLOB_DIR}/${GO_BLOB_FILE}" "golang-1-linux/${GO_BLOB_FILE}"
-        else
-          echo "Go blob already present: ${GO_BLOB_DIR}/${GO_BLOB_FILE}"
         fi
 
         mkdir -p blobs/rootfs
@@ -139,31 +120,29 @@ runs:
 
         bosh sync-blobs
 
-        mkdir -p ../release-artifacts
+        mkdir -p ../rootfs-artifacts
+        OUTPUT="../rootfs-artifacts/${STACK}-release-${VERSION}.tgz"
+
         if [[ "$FINAL" == "true" ]]; then
           echo "Creating FINAL release..."
           bosh create-release --final \
             --name "${{ inputs.release_name }}" \
             --version "${VERSION}" \
-            --tarball "../release-artifacts/${{ inputs.release_name }}-${VERSION}.tgz" \
+            --tarball "$OUTPUT" \
             --force
         else
           echo "Creating DEV (non-final) release..."
           bosh create-release \
             --name "${{ inputs.release_name }}" \
             --version "${VERSION}" \
-            --tarball "../release-artifacts/${{ inputs.release_name }}-${VERSION}.tgz" \
+            --tarball "$OUTPUT" \
             --force
         fi
 
-        echo "release_tarball=../release-artifacts/${{ inputs.release_name }}-${VERSION}.tgz" >> $GITHUB_OUTPUT
+        echo "release_tarball=$OUTPUT" >> $GITHUB_OUTPUT
 
     - name: Set output
       id: set-output
       shell: bash
       run: |
-        if [[ -n "${{ steps.build.outputs.release_tarball || '' }}" ]]; then
-          echo "release_tarball=${{ steps.build.outputs.release_tarball }}" >> $GITHUB_OUTPUT
-        else
-          echo "release_tarball=${{ steps.check-release.outputs.release_tarball }}" >> $GITHUB_OUTPUT
-        fi
+        echo "release_tarball=${{ steps.build.outputs.release_tarball }}" >> $GITHUB_OUTPUT
