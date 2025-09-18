@@ -85,7 +85,7 @@ runs:
         stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
         release_name: ${{ inputs.stack }}
-        release_repo: ${{ inputs.release_repo }}
+        release_repo: ${{ inputs.release_repo }}/${{ inputs.release_repo }}
         go_version: ${{ inputs.go_version }}
 
     - name: Create BOSH release notes
