@@ -83,6 +83,7 @@ runs:
       with:
         release_dir: release
         stack: ${{ inputs.stack }}
+        bucket_name: ${{ inputs.bucket_name }}
         version: ${{ inputs.version }}
         release_name: ${{ inputs.stack }}
         release_repo: ${{ inputs.owner }}/${{ inputs.release_repo }}

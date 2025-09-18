@@ -8,6 +8,9 @@ inputs:
   stack:
     description: 'Stack name (e.g., cflinuxfs5)'
     required: true
+  bucket_name:
+    description: 'Bucket name (e.g., cflinuxfs5)'
+    required: true
   version:
     description: 'Final version number (e.g., 1.0.0)'
     required: true
@@ -69,6 +72,19 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
         bosh --version
+
+    - name: Configure BOSH blobstore
+      shell: bash
+      run: |
+        mkdir -p release/config
+        cat > release/config/private.yml <<EOF
+        blobstore:
+          provider: s3
+          options:
+            bucket_name: ${{ inputs.bucket_name }}
+            access_key_id: ${{ env.AWS_ACCESS_KEY_ID }}
+            secret_access_key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+        EOF
 
     - name: Check if final release already exists
       id: check-release
