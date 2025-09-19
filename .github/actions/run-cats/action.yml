@@ -142,6 +142,14 @@ runs:
           "skip_php": true,
           "skip_dotnet": true,
           "skip_staticfile": true
+          "stacks": [
+              {
+                "name": "cflinuxfs5",
+                "buildpacks": {
+                  "go": "i343759_go_buldpack"
+                }
+              }
+            ]
         }
         EOF
         echo "config=$CONFIG_FILE" >> $GITHUB_OUTPUT

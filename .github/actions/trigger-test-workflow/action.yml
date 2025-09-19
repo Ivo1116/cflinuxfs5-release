@@ -24,5 +24,5 @@ runs:
             "skip_cleanup": "true",
             "skip_setup": "true",
             "skip_deploy": "true",
-            "skip_cats": "true"
+            "skip_cats": "false"
           }
