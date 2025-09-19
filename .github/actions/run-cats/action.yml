@@ -120,7 +120,7 @@ runs:
           "skip_ssl_validation": true,
           "use_existing_organization": false,
           "use_existing_space": false,
-          "include_apps": true,
+          "include_apps": false,
           "include_detect": true,
           "include_backend_compatibility": false,
           "include_docker": false,
@@ -142,6 +142,7 @@ runs:
           "skip_php": true,
           "skip_dotnet": true,
           "skip_staticfile": true
+          "go_buildpack_name": "i343759_go_buldpack"
         }
         EOF
         echo "config=$CONFIG_FILE" >> $GITHUB_OUTPUT
