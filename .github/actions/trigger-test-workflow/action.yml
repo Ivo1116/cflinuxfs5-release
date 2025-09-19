@@ -12,11 +12,10 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Dispatch Test Workflow
+    - name: Trigger Test Workflow
       uses: peter-evans/repository-dispatch@v3
       with:
         token: ${{ inputs.github_token }}
-        repository: ivo1116/cflinuxfs5-release
         event-type: rootfs-build-completed
         client-payload: |
           {
