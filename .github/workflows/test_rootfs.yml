@@ -38,7 +38,7 @@ env:
   OPS_FILE: use-cflinuxfs5.yml
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SYSTEM_DOMAIN: sisle.org
-  GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kP2Krc1zMlz8FK1kCfneWqoL2SRvN46pVutrZi
+  GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPMb9xqMjZzIYWRiCJq976v5K8O0FDln4djspB
   BBL_UP_DELAY_SECONDS: 30
 
 permissions:
