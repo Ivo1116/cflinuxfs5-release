@@ -134,6 +134,7 @@ runs:
           "include_tasks": false,
           "include_v3": false,
           "include_syslog": false,
+          "include_app_syslog_tcp": false,
           "skip_diego_unsupported_tests": true,
           "skip_go": false,
           "skip_node": true,
