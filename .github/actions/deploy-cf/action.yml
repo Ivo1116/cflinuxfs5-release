@@ -117,7 +117,7 @@ runs:
         set -euo pipefail
         BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
         DOMAIN="${{ inputs.system_domain }}"
-        OPS_FILE="${{ inputs.ops-file }}"
+        OPS_FILE="${{ inputs.ops_file }}"
         eval "$(bbl print-env --state-dir $BBL_STATE_DIR)"
         
         bosh -n -d cf deploy cf-deployment/cf-deployment.yml \
