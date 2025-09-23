@@ -108,7 +108,7 @@ runs:
       uses: ./.github/actions/upload-to-github
       with:
         github_token: ${{ inputs.github_token }}
-        stack: bosh
+        stack: ${{ inputs.stack }}
         type: release
         version: ${{ inputs.version }}
         owner: ${{ inputs.owner }}

@@ -20,7 +20,7 @@ runs:
         client-payload: |
           {
             "version": "${{ inputs.version }}",
-            "skip_cleanup": "true",
+            "skip_cleanup": "false",
             "skip_setup": "true",
             "skip_deploy": "true",
             "skip_cats": "false"
