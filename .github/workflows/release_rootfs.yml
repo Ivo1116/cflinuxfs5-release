@@ -29,6 +29,7 @@ env:
   DOCKER_IMAGE: ivo1116/cflinuxfs5
   REPO_OWNER: ivo1116
   BUCKET_NAME: cflinuxfs5test
+  GOLANG_VERSION: 1.24.6
   DEFAULT_BRANCH: main
   CFLINUXFS5_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
   CFLINUXFS5_RELEASE_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
@@ -204,7 +205,7 @@ jobs:
           git_user_name: cflinuxfs5-bot
           git_user_email: cflinuxfs5-bot@test.com
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          go_version: 1.24.6
+          go_version: ${{ env.GOLANG_VERSION }}
           owner: ${{ env.REPO_OWNER }}
 
   summary:

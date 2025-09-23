@@ -110,8 +110,7 @@ runs:
         github_token: ${{ inputs.github_token }}
         tag: v${{ inputs.version }}
         name: v${{ inputs.version }}
-        body_file: release-body/body
-        asset_glob: release-artifacts/*.tgz
+        type: 'release'
         owner: ${{ inputs.owner }}
         repo: ${{ inputs.release_repo }} 
         target_commitish: ${{ steps.rel_commit.outputs.commit_sha }}

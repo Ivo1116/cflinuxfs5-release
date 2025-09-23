@@ -5,6 +5,9 @@ inputs:
   stack:
     description: 'Stack name'
     required: true
+  type:
+    description: 'Type of upload(release || stack)'
+    default: 'stack'
   version:
     description: 'Release version'
     required: true
@@ -47,7 +50,7 @@ runs:
         stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
-        artifact_type: stack
+        artifact_type: ${{ inputs.type }}
 
     - name: Download final receipt from S3
       if: inputs.include_receipt == 'true'
@@ -71,12 +74,15 @@ runs:
         set -euo pipefail
         mkdir -p release-assets
         
-        cp rootfs-artifacts/${{ inputs.stack }}-*.tar.gz release-assets/
-        
-        if [[ "${{ inputs.include_receipt }}" == "true" ]]; then
-          if [[ -f receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} ]]; then
-            cp receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} release-assets/
+        if [[ "${{ inputs.artifact_type }}" == "stack" ]]; then
+          cp rootfs-artifacts/${{ inputs.stack }}-*.tar.gz release-assets/
+          if [[ "${{ inputs.include_receipt }}" == "true" ]]; then
+            if [[ -f receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} ]]; then
+              cp receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} release-assets/
+            fi
           fi
+        elif [[ "${{ inputs.artifact_type }}" == "release" ]]; then
+          cp release-artifacts/${{ inputs.stack }}-${{ inputs.version }}.tgz release-assets/
         fi
         
         echo "Release assets prepared:"
