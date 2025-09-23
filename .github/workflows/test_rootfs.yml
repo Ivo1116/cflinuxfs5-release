@@ -232,7 +232,7 @@ jobs:
       - name: Destroy test environment
         uses: ./.github/actions/bbl-destroy
         with:
-          env_name: ${{ env.STACK }}-test
+          env_name: ${{ env.STACK }}
           gcp_project_id: ${{ env.GCP_PROJECT_ID }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}

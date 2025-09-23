@@ -55,7 +55,7 @@ runs:
         artifact_type: ${{ inputs.type }}
 
     - name: Download final receipt from S3
-      if: inputs.include_receipt == 'true' 
+      if: inputs.include_receipt == 'true'
       uses: ./.github/actions/download-s3
       with:
         stack: ${{ inputs.stack }}
