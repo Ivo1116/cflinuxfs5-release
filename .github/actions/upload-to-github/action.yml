@@ -85,7 +85,7 @@ runs:
             fi
           fi
         elif [[ "${{ inputs.type }}" == "release" ]]; then
-          cp release-artifacts/${{ inputs.stack }}-${{ inputs.version }}.tgz release-assets/
+          cp release-artifacts/${{ inputs.stack }}-release-${{ inputs.version }}.tgz release-assets/
         fi
         
         echo "Release assets prepared:"

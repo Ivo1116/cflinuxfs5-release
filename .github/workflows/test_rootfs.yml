@@ -203,7 +203,6 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       always() && 
-      needs.deploy-cf.result == 'success' &&
       needs.resolve-inputs.outputs.skip_cleanup != 'true'
     steps:
       - name: Checkout self
@@ -225,8 +224,6 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       always() && 
-      needs.resolve-inputs.outputs.skip_setup != 'true' &&
-      needs.setup-test-environment.result == 'success' && 
       needs.resolve-inputs.outputs.skip_cleanup != 'true'
     steps:
       - name: Checkout self
