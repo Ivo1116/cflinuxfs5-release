@@ -23,6 +23,7 @@ inputs:
     required: true
   ops_file:
     description: 'use cflinuxfs5 ops file'
+    default: "ops-file/use-cflinuxfs5.yml"
     required: true
   system_domain:
     description: 'System domain for CF'
@@ -117,13 +118,13 @@ runs:
         set -euo pipefail
         BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
         DOMAIN="${{ inputs.system_domain }}"
-        OPS_FILE="${{ inputs.ops_file }}"
+        OPS_FILE="ops-file/${{ inputs.ops_file }}"
         eval "$(bbl print-env --state-dir $BBL_STATE_DIR)"
         
         bosh -n -d cf deploy cf-deployment/cf-deployment.yml \
           -o cf-deployment/operations/experimental/use-noble-stemcell.yml \
           -o cf-deployment/operations/use-postgres.yml \
-          -o ops-file/${OPS_FILE} \
+          -o ${OPS_FILE} \
           -v system_domain=${DOMAIN}
 
         echo "success=true" >> "$GITHUB_OUTPUT"
