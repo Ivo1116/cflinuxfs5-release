@@ -138,6 +138,19 @@ jobs:
           CFLINUXFS5_DEPLOY_KEY: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          
+      - name: Setup Cloudflare DNS
+        id: cloudflare-dns
+        uses: ./.github/actions/setup-cloudflare-dns
+        with:
+          env_name: ${{ env.STACK }}
+          bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
+          bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
+          system_domain: ${{ env.SYSTEM_DOMAIN }}
+        env:
+          BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}  
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 
   run-cats:
     name: Run Cloud Foundry Acceptance Tests

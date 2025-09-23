@@ -1,0 +1,121 @@
+name: 'Setup Cloudflare DNS'
+description: 'Configure DNS records for CF deployment based on BBL state'
+
+inputs:
+  env_name:
+    description: 'BBL environment name'
+    required: true
+  bbl_state_repo:
+    description: 'BBL state repo (owner/repo)'
+    required: true
+  bbl_state_branch:
+    description: 'BBL state branch'
+    required: false
+    default: main
+  system_domain:
+    description: 'System domain (e.g., sisle.org)'
+    required: true
+
+outputs:
+  success:
+    description: 'Whether DNS setup succeeded'
+    value: ${{ steps.dns.outputs.success }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout BBL state repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.bbl_state_repo }}
+        ref: ${{ inputs.bbl_state_branch }}
+        token: ${{ env.BBL_STATE_DEPLOY_KEY }}  
+        path: bbl-state
+
+    - name: Install BBL and CF CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        wget -O /tmp/bbl https://github.com/cloudfoundry/bosh-bootloader/releases/download/v9.0.36/bbl-v9.0.36_linux_amd64
+        chmod +x /tmp/bbl && sudo mv /tmp/bbl /usr/local/bin/bbl
+
+        wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key | sudo apt-key add -
+        echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
+        sudo apt-get update && sudo apt-get install -y cf8-cli
+
+    - name: Setup Cloudflare DNS Records
+      id: dns
+      shell: bash
+      run: |
+        set -euo pipefail
+        BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
+        
+        eval "$(bbl print-env --state-dir "$BBL_STATE_DIR")"
+        
+        MAIN_LB_IP=$(bbl lb-address --state-dir "$BBL_STATE_DIR")  
+        SSH_LB_IP=$(bbl ssh-address --state-dir "$BBL_STATE_DIR" || echo "$MAIN_LB_IP") 
+        TCP_LB_IP=$(bbl tcp-address --state-dir "$BBL_STATE_DIR" || echo "$MAIN_LB_IP") 
+        DOPPLER_LB_IP=$(bbl doppler-address --state-dir "$BBL_STATE_DIR" || echo "$MAIN_LB_IP") 
+        LOGGREGATOR_LB_IP=$(bbl loggregator-address --state-dir "$BBL_STATE_DIR" || echo "$DOPPLER_LB_IP")
+        
+        DOMAIN="${{ inputs.system_domain }}"
+        ZONE_ID="${{ env.CLOUDFLARE_ZONE_ID }}"
+        API_TOKEN="${{ env.CLOUDFLARE_API_TOKEN }}"
+        
+        echo "Extracted IPs:"
+        echo "MAIN_LB_IP: $MAIN_LB_IP"
+        echo "SSH_LB_IP: $SSH_LB_IP"
+        echo "TCP_LB_IP: $TCP_LB_IP"
+        echo "DOPPLER_LB_IP: $DOPPLER_LB_IP"
+        echo "LOGGREGATOR_LB_IP: $LOGGREGATOR_LB_IP"
+        
+        upsert_record() {
+          local name="$1"
+          local ip="$2"
+          local record_type="A"
+          
+          local existing_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=$record_type&name=$name.$DOMAIN" \
+            -H "Authorization: Bearer $API_TOKEN" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
+          
+          if [[ -n "$existing_id" ]]; then
+            curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$existing_id" \
+              -H "Authorization: Bearer $API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"$record_type\",\"name\":\"$name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty'
+          else
+            # Create new
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"$record_type\",\"name\":\"$name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty'
+          fi
+        }
+        
+        echo "Configuring DNS records for $DOMAIN..."
+        
+        # doppler.sys
+        upsert_record "doppler.sys" "$DOPPLER_LB_IP" && echo "Updated doppler.sys -> $DOPPLER_LB_IP"
+        
+        # loggregator.sys
+        upsert_record "loggregator.sys" "$LOGGREGATOR_LB_IP" && echo "Updated loggregator.sys -> $LOGGREGATOR_LB_IP"
+        
+        # * (wildcard for apps)
+        upsert_record "*" "$MAIN_LB_IP" && echo "Updated *.${DOMAIN} -> $MAIN_LB_IP"
+        
+        # sisle.org (apex)
+        upsert_record "@" "$MAIN_LB_IP" && echo "Updated ${DOMAIN} -> $MAIN_LB_IP"  
+        
+        # ssh.sys
+        upsert_record "ssh.sys" "$SSH_LB_IP" && echo "Updated ssh.sys -> $SSH_LB_IP"
+        
+        # tcp.sys
+        upsert_record "tcp.sys" "$TCP_LB_IP" && echo "Updated tcp.sys -> $TCP_LB_IP"
+        
+        
+        echo "::notice::DNS records configured successfully"
+        echo "success=true" >> $GITHUB_OUTPUT
+      env:
+        BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }} 
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} 
+        CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
