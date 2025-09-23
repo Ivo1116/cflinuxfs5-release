@@ -105,12 +105,11 @@ runs:
         git_user_email: ${{ inputs.git_user_email }}
 
     - name: Publish BOSH GitHub Release
-      uses: ./.github/actions/create-gh-release
+      uses: ./.github/actions/upload-to-github
       with:
         github_token: ${{ inputs.github_token }}
-        tag: v${{ inputs.version }}
-        name: v${{ inputs.version }}
-        type: 'release'
+        stack: bosh
+        type: release
+        version: ${{ inputs.version }}
         owner: ${{ inputs.owner }}
-        repo: ${{ inputs.release_repo }} 
-        target_commitish: ${{ steps.rel_commit.outputs.commit_sha }}
+        repo: ${{ inputs.release_repo }}

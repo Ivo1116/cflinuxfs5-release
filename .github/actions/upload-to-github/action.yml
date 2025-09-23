@@ -62,6 +62,7 @@ runs:
         artifact_type: receipt
 
     - name: Generate release notes
+      if: ${{ inputs.type == 'stack' }}
       uses: ./.github/actions/generate-release-notes
       with:
         stack: ${{ inputs.stack }}
@@ -74,14 +75,14 @@ runs:
         set -euo pipefail
         mkdir -p release-assets
         
-        if [[ "${{ inputs.artifact_type }}" == "stack" ]]; then
+        if [[ "${{ inputs.type }}" == "stack" ]]; then
           cp rootfs-artifacts/${{ inputs.stack }}-*.tar.gz release-assets/
           if [[ "${{ inputs.include_receipt }}" == "true" ]]; then
             if [[ -f receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} ]]; then
               cp receipt-artifacts/receipt.${{ inputs.stack }}.x86_64-${{ inputs.version }} release-assets/
             fi
           fi
-        elif [[ "${{ inputs.artifact_type }}" == "release" ]]; then
+        elif [[ "${{ inputs.type }}" == "release" ]]; then
           cp release-artifacts/${{ inputs.stack }}-${{ inputs.version }}.tgz release-assets/
         fi
         
