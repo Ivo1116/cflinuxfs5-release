@@ -115,7 +115,3 @@ runs:
         
         echo "::notice::DNS records configured successfully"
         echo "success=true" >> $GITHUB_OUTPUT
-      env:
-        BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }} 
-        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} 
-        CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
