@@ -81,8 +81,7 @@ runs:
         
         echo "Environment destroyed successfully"
         echo "success=true" >> $GITHUB_OUTPUT
-      env:
-        GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}  
+
 
     - name: Cleanup GCP key
       if: always()
@@ -118,5 +117,4 @@ runs:
           echo "No BBL state changes to commit."
         fi
         popd
-      env:
-        BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}  
+
