@@ -1,7 +1,5 @@
-# .github/actions/setup-cloudflare-dns/action.yml
-
 name: 'Setup Cloudflare DNS for CF Environment'
-description: 'Extract IPs from BOSH vars YAML files in BBL state repo and create/update DNS records in Cloudflare'
+description: 'Extract IPs from BOSH vars YAML files in BBL state repo, clean up duplicate DNS records in Cloudflare, and create/update DNS records'
 
 inputs:
   env_name:
@@ -11,7 +9,6 @@ inputs:
   bbl_state_repo:
     description: 'BBL state repository (cloned for vars files)'
     required: true
-    default: 'ivo1116/buildpacks-envs'  # Default from main workflow
   bbl_state_branch:
     description: 'BBL state branch'
     required: true
@@ -19,7 +16,6 @@ inputs:
   system_domain:
     description: 'System domain (e.g., sisle.org)'
     required: true
-    default: 'sisle.org'
 
 outputs:
   success:
@@ -32,9 +28,7 @@ runs:
     - name: Install dependencies (yq and jq)
       shell: bash
       run: |
-        # Install yq
         sudo snap install yq
-        # Install jq (usually available, but ensure)
         sudo apt-get update
         sudo apt-get install -y jq
 
@@ -51,11 +45,10 @@ runs:
       id: extract-ips
       shell: bash
       run: |
-        # Vars files are in cloned BBL state repo at bbl-state/{env_name}/vars/
         ENV_NAME="${{ inputs.env_name }}"
         JUMBOX_VARS="bbl-state/${ENV_NAME}/vars/jumpbox-vars-file.yml"
         DIRECTOR_VARS="bbl-state/${ENV_NAME}/vars/director-vars-file.yml"
-        SYS_SUBDOMAIN="sys"  # Fixed as per standard CF
+        SYS_SUBDOMAIN="sys"  
 
         if [[ ! -f "$JUMBOX_VARS" || ! -f "$DIRECTOR_VARS" ]]; then
           echo "Error: YAML files not found at $JUMBOX_VARS and $DIRECTOR_VARS"
@@ -68,18 +61,15 @@ runs:
         TCP_ROUTER_LB_IP=$(yq eval '.tcp_router_lb_ip' "$JUMBOX_VARS")
         WS_LB_IP=$(yq eval '.ws_lb_ip' "$JUMBOX_VARS")
 
-        # Validate consistency with director vars (optional)
         if [[ "$(yq eval '.router_lb_ip' "$DIRECTOR_VARS")" != "$ROUTER_LB_IP" ]]; then
           echo "Warning: router_lb_ip mismatch between files."
         fi
 
-        # Output IPs as step outputs and env for next steps
         echo "router_lb_ip=$ROUTER_LB_IP" >> $GITHUB_OUTPUT
         echo "ssh_proxy_lb_ip=$SSH_PROXY_LB_IP" >> $GITHUB_OUTPUT
         echo "tcp_router_lb_ip=$TCP_ROUTER_LB_IP" >> $GITHUB_OUTPUT
         echo "ws_lb_ip=$WS_LB_IP" >> $GITHUB_OUTPUT
 
-        # Export as env for the next step
         echo "ROUTER_LB_IP=$ROUTER_LB_IP" >> $GITHUB_ENV
         echo "SSH_PROXY_LB_IP=$SSH_PROXY_LB_IP" >> $GITHUB_ENV
         echo "TCP_ROUTER_LB_IP=$TCP_ROUTER_LB_IP" >> $GITHUB_ENV
@@ -102,82 +92,97 @@ runs:
         fi
         echo "Cloudflare credentials validated."
 
-    - name: Create or Update DNS Records
+    - name: Create or Update DNS Records (with Duplicate Cleanup)
       id: setup-dns
       shell: bash
       run: |
-        # Function to create or patch a DNS record
-        create_or_update_record() {
+        delete_all_records_for_name() {
           local name="$1"
-          local ip="$2"
-          local record_type="A"
-          local proxied=false  # DNS only (no proxy)
+          local record_type="$2"
 
-          # First, check if record exists (GET request)
-          local existing_record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
+          echo "Checking for existing records for $name ($record_type)..."
+          local existing_records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json")
 
-          local record_id=$(echo "$existing_record" | jq -r '.result[0].id // empty')
+          local records=$(echo "$existing_records" | jq -r '.result[]? | select(.id != null) | .id')
 
-          if [[ "$record_id" == "null" || -z "$record_id" ]]; then
-            # Create new record
-            echo "Creating new record: $name -> $ip"
-            local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
-              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data "{
-                \"type\": \"$record_type\",
-                \"name\": \"$name\",
-                \"content\": \"$ip\",
-                \"ttl\": 1,
-                \"proxied\": $proxied
-              }")
+          if [[ "$records" == "null" ]] || [[ -z "$records" ]]; then
+            echo "No existing records found for $name."
+            return 0
+          fi
 
-            if echo "$response" | jq -e '.success' >/dev/null; then
-              echo "Successfully created: $name"
-            else
-              echo "Failed to create $name: $(echo "$response" | jq -r '.errors')"
-              return 1
+          local count=0
+          echo "$records" | while read -r record_id; do
+            if [[ -n "$record_id" && "$record_id" != "null" ]]; then
+              echo "Deleting existing record ID: $record_id for $name"
+              local delete_response=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$record_id" \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                -H "Content-Type: application/json")
+
+              if echo "$delete_response" | jq -e '.success' >/dev/null; then
+                echo "Successfully deleted record: $record_id"
+                ((count++))
+              else
+                echo "Failed to delete $record_id: $(echo "$delete_response" | jq -r '.errors')"
+                return 1
+              fi
             fi
-          else
-            # Update existing record
-            echo "Updating existing record: $name -> $ip"
-            local response=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$record_id" \
-              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data "{
-                \"type\": \"$record_type\",
-                \"name\": \"$name\",
-                \"content\": \"$ip\",
-                \"ttl\": 1,
-                \"proxied\": $proxied
-              }")
+          done
 
-            if echo "$response" | jq -e '.success' >/dev/null; then
-              echo "Successfully updated: $name"
-            else
-              echo "Failed to update $name: $(echo "$response" | jq -r '.errors')"
-              return 1
-            fi
+          if [[ $count -gt 0 ]]; then
+            echo "Deleted $count duplicate/old records for $name."
           fi
         }
 
-        # Records to create (based on CF standards)
-        # Wildcard app domain (*.sisle.org)
-        create_or_update_record "*" "$ROUTER_LB_IP"
+        create_record() {
+          local name="$1"
+          local ip="$2"
+          local record_type="A"
+          local proxied=false  
 
-        # Apex domain (sisle.org)
-        create_or_update_record "$DOMAIN" "$ROUTER_LB_IP"
+          echo "Creating new record: $name -> $ip"
+          local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"type\": \"$record_type\",
+              \"name\": \"$name\",
+              \"content\": \"$ip\",
+              \"ttl\": 1,
+              \"proxied\": $proxied
+            }")
 
-        # Wildcard system domain (*.sys.sisle.org) to gorouter
-        create_or_update_record "*.$SYS_SUBDOMAIN.$DOMAIN" "$ROUTER_LB_IP"
+          if echo "$response" | jq -e '.success' >/dev/null; then
+            echo "Successfully created: $name"
+          else
+            echo "Failed to create $name: $(echo "$response" | jq -r '.errors')"
+            return 1
+          fi
+        }
 
-        # Specific system records
-        create_or_update_record "doppler.$SYS_SUBDOMAIN.$DOMAIN" "$WS_LB_IP"
-        create_or_update_record "loggregator.$SYS_SUBDOMAIN.$DOMAIN" "$WS_LB_IP"
-        create_or_update_record "ssh.$SYS_SUBDOMAIN.$DOMAIN" "$SSH_PROXY_LB_IP"
-        create_or_update_record "tcp.$SYS_SUBDOMAIN.$DOMAIN" "$TCP_ROUTER_LB_IP"
+        local_records=(
+          "* $ROUTER_LB_IP"  
+          "$DOMAIN $ROUTER_LB_IP"  
+          "*.$SYS_SUBDOMAIN.$DOMAIN $ROUTER_LB_IP"  
+          "doppler.$SYS_SUBDOMAIN.$DOMAIN $WS_LB_IP"
+          "loggregator.$SYS_SUBDOMAIN.$DOMAIN $WS_LB_IP"
+          "ssh.$SYS_SUBDOMAIN.$DOMAIN $SSH_PROXY_LB_IP"
+          "tcp.$SYS_SUBDOMAIN.$DOMAIN $TCP_ROUTER_LB_IP"
+        )
 
-        echo "All DNS records configured successfully!"
-        echo "success=true" >> $GITHUB_OUTPUT
+        local all_success=true
+        for record in "${local_records[@]}"; do
+          IFS=' ' read -r name ip <<< "$record"
+          delete_all_records_for_name "$name" "A"
+          create_record "$name" "$ip" || all_success=false
+        done
+
+        if [[ $all_success == true ]]; then
+          echo "All DNS records cleaned up and configured successfully!"
+          echo "success=true" >> $GITHUB_OUTPUT
+        else
+          echo "One or more DNS operations failed."
+          echo "success=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
