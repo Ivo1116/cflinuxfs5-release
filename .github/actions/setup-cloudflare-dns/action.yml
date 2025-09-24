@@ -29,8 +29,9 @@ runs:
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
-        token: ${{ env.BBL_STATE_DEPLOY_KEY }}  
+        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}  
         path: bbl-state
+        persist-credentials: false
 
     - name: Install BBL and CF CLI
       shell: bash
