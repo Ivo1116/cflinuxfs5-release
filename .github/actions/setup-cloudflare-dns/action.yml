@@ -38,17 +38,13 @@ runs:
       run: |
         set -euo pipefail
         sudo apt-get update && sudo apt-get install -y jq
-        
         wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
         chmod +x /usr/local/bin/yq
-        
         wget -O /tmp/bbl https://github.com/cloudfoundry/bosh-bootloader/releases/download/v9.0.36/bbl-v9.0.36_linux_amd64
         chmod +x /tmp/bbl && sudo mv /tmp/bbl /usr/local/bin/bbl
-
         wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key | sudo apt-key add -
         echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
         sudo apt-get update && sudo apt-get install -y cf8-cli
-        
         echo "Tools installed: jq, yq, bbl, cf-cli"
         yq --version  
 
@@ -59,189 +55,85 @@ runs:
         set -euo pipefail
         BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
         DOMAIN="${{ inputs.system_domain }}"
-        
-        echo "BBL state dir: $BBL_STATE_DIR"
-        
-        if [[ ! -d "$BBL_STATE_DIR" ]]; then
-          echo "Error: BBL state directory not found: $BBL_STATE_DIR"
-          echo "Cannot set up DNS without state."
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        
         VARS_DIR="$BBL_STATE_DIR/vars"
         DIRECTOR_VARS_FILE="$VARS_DIR/director-vars-file.yml"
         JUMPBOX_VARS_FILE="$VARS_DIR/jumpbox-vars-file.yml"
-        
-        if [[ ! -d "$VARS_DIR" ]]; then
+        if [[ ! -d "$BBL_STATE_DIR/vars" ]]; then
           echo "Error: vars dir not found in $BBL_STATE_DIR/vars"
-          echo "Run 'bbl up' to completion first."
           echo "success=false" >> $GITHUB_OUTPUT
           exit 1
         fi
-        
         if [[ -f "$DIRECTOR_VARS_FILE" ]]; then
           VARS_FILE="$DIRECTOR_VARS_FILE"
         elif [[ -f "$JUMPBOX_VARS_FILE" ]]; then
           VARS_FILE="$JUMPBOX_VARS_FILE"
-          echo "Using jumpbox vars file (director missing)"
         else
-          echo "Error: No vars YML files in $VARS_DIR"
-          echo "List: $(ls -la $VARS_DIR || echo 'Empty')"
-          echo "Sample $BBL_STATE_DIR content: $(find $BBL_STATE_DIR -name '*.yml' -exec ls -la {} \; 2>/dev/null || echo 'No YMLs')"
+          echo "Error: No vars YML files found"
           echo "success=false" >> $GITHUB_OUTPUT
           exit 1
         fi
-        
-        echo "Using vars file: $VARS_FILE"
-        echo "Sample content (first 5 lines): $(head -5 "$VARS_FILE")"
-        
-        if ! eval "$(bbl print-env --state-dir "$BBL_STATE_DIR")"; then
-          echo "Error: Failed to load BBL env from $BBL_STATE_DIR"
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        
-        echo "Parsing $VARS_FILE for IPs..."
-        ROUTER_LB_IP=$(yq eval '.router_lb_ip // empty' "$VARS_FILE")
-        SSH_PROXY_LB_IP=$(yq eval '.ssh_proxy_lb_ip // empty' "$VARS_FILE")
-        TCP_ROUTER_LB_IP=$(yq eval '.tcp_router_lb_ip // empty' "$VARS_FILE")
-        WS_LB_IP=$(yq eval '.ws_lb_ip // empty' "$VARS_FILE")
-        EXTERNAL_IP=$(yq eval '.external_ip // empty' "$VARS_FILE")
-        DIRECTOR_IP=$(yq eval '.director_address // empty | gsub("https://"; "") | gsub(":.*"; "")' "$VARS_FILE")  
-        
-        MAIN_LB_IP="${ROUTER_LB_IP:-$EXTERNAL_IP}"
-        SSH_LB_IP="${SSH_PROXY_LB_IP:-$DIRECTOR_IP}"
-        TCP_LB_IP="${TCP_ROUTER_LB_IP:-$MAIN_LB_IP}"
-        DOPPLER_LB_IP="${WS_LB_IP:-$MAIN_LB_IP}"
-        LOGGREGATOR_LB_IP="${DOPPLER_LB_IP}"
-        
+        eval "$(bbl print-env --state-dir "$BBL_STATE_DIR")"
+        ROUTER_LB_IP=$(yq eval -r '.router_lb_ip // ""' "$VARS_FILE")
+        SSH_PROXY_LB_IP=$(yq eval -r '.ssh_proxy_lb_ip // ""' "$VARS_FILE")
+        TCP_ROUTER_LB_IP=$(yq eval -r '.tcp_router_lb_ip // ""' "$VARS_FILE")
+        WS_LB_IP=$(yq eval -r '.ws_lb_ip // ""' "$VARS_FILE")
+        EXTERNAL_IP=$(yq eval -r '.external_ip // ""' "$VARS_FILE")
+        DIRECTOR_ADDR=$(yq eval -r '.director_address // ""' "$VARS_FILE")
+        DIRECTOR_IP=$(echo "$DIRECTOR_ADDR" | sed 's|https\?://||' | sed 's|:.*||')
+        MAIN_LB_IP="${ROUTER_LB_IP:-${WS_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-''}}}}"
+        SSH_LB_IP="${SSH_PROXY_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-${MAIN_LB_IP:-''}}}}"
+        TCP_LB_IP="${TCP_ROUTER_LB_IP:-${MAIN_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-''}}}}"
+        DOPPLER_LB_IP="${WS_LB_IP:-${MAIN_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-''}}}}"
+        LOGGREGATOR_LB_IP="$DOPPLER_LB_IP"
         if [[ -z "$MAIN_LB_IP" ]]; then
-          echo "Error: No router LB IP found in $VARS_FILE. Extracted:"
-          echo "router_lb_ip: $ROUTER_LB_IP"
-          echo "external_ip: $EXTERNAL_IP"
-          echo "director_address: $(yq eval '.director_address // empty' "$VARS_FILE")"
+          echo "Error: No main IP found"
           echo "success=false" >> $GITHUB_OUTPUT
           exit 1
         fi
-        
-        echo "Extracted IPs from BBL vars YML:"
-        echo "- MAIN_LB_IP (router): $MAIN_LB_IP"
-        echo "- SSH_LB_IP (ssh_proxy): $SSH_LB_IP"
-        echo "- TCP_LB_IP (tcp_router): $TCP_LB_IP"
-        echo "- DOPPLER_LB_IP (ws): $DOPPLER_LB_IP"
-        echo "- LOGGREGATOR_LB_IP: $LOGGREGATOR_LB_IP"
-        
         ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
         API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-        
         if [[ -z "$ZONE_ID" || -z "$API_TOKEN" ]]; then
-          echo "Error: Missing CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN env/secrets."
+          echo "Error: Missing Cloudflare secrets"
           echo "success=false" >> $GITHUB_OUTPUT
           exit 1
         fi
-        
         upsert_record() {
           local name="$1"  
           local ip="$2"
           local record_type="A"
-          
           local api_name="$name"
           if [[ "$name" == "@" ]]; then
             api_name=""
           fi
-          
-          echo "Upserting $name.$DOMAIN (API name: '$api_name', IP: $ip)"
-          
           local query_name="$api_name"
-          local existing_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=$record_type&name=${query_name:-.}.${DOMAIN}" \
-            -H "Authorization: Bearer $API_TOKEN" \
-            -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
-          
+          local existing_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=$record_type&name=${query_name:-.}.${DOMAIN}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
           if [[ -n "$existing_id" ]]; then
-            local success=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$existing_id" \
-              -H "Authorization: Bearer $API_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty')
+            local success=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$existing_id" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty')
             if [[ "$success" == "true" ]]; then
               echo "Updated $name.$DOMAIN -> $ip"
               return 0
-            else
-              local error_msg=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$existing_id" \
-                -H "Authorization: Bearer $API_TOKEN" \
-                -H "Content-Type: application/json" \
-                --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.errors[0].message // "Unknown error"')
-              echo "Update failed for $name.$DOMAIN: $error_msg"
-              return 1
             fi
           else
-            local success=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
-              -H "Authorization: Bearer $API_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty')
+            local success=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty')
             if [[ "$success" == "true" ]]; then
               echo "Created $name.$DOMAIN -> $ip"
               return 0
-            else
-              local error_msg=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
-                -H "Authorization: Bearer $API_TOKEN" \
-                -H "Content-Type: application/json" \
-                --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.errors[0].message // "Unknown error"')
-              echo "Create failed for $name.$DOMAIN: $error_msg"
-              return 1
             fi
           fi
+          return 1
         }
-        
         local overall_success=true
-        
-        # doppler.sys (use ws_lb_ip for log streaming)
-        if upsert_record "doppler.sys" "$DOPPLER_LB_IP"; then
-          echo "✓ doppler.sys -> $DOPPLER_LB_IP"
-        else
-          overall_success=false
-        fi
-        
-        # loggregator.sys (ws_lb_ip)
-        if upsert_record "loggregator.sys" "$LOGGREGATOR_LB_IP"; then
-          echo "✓ loggregator.sys -> $LOGGREGATOR_LB_IP"
-        else
-          overall_success=false
-        fi
-        
-        # * (wildcard for apps - router_lb_ip)
-        if upsert_record "*" "$MAIN_LB_IP"; then
-          echo "✓ *.${DOMAIN} -> $MAIN_LB_IP"
-        else
-          overall_success=false
-        fi
-        
-        # sisle.org (apex - router_lb_ip)
-        if upsert_record "@" "$MAIN_LB_IP"; then
-          echo "✓ ${DOMAIN} (apex) -> $MAIN_LB_IP"
-        else
-          overall_success=false
-        fi
-        
-        # ssh.sys (ssh_proxy_lb_ip)
-        if upsert_record "ssh.sys" "$SSH_LB_IP"; then
-          echo "✓ ssh.sys -> $SSH_LB_IP"
-        else
-          overall_success=false
-        fi
-        
-        # tcp.sys (tcp_router_lb_ip)
-        if upsert_record "tcp.sys" "$TCP_LB_IP"; then
-          echo "✓ tcp.sys -> $TCP_LB_IP"
-        else
-          overall_success=false
-        fi
-        
-        if [[ $overall_success == true ]]; then
-          echo "::notice::All DNS records configured successfully for $DOMAIN"
+        upsert_record "doppler.sys" "$DOPPLER_LB_IP" && echo "Updated doppler.sys -> $DOPPLER_LB_IP"
+        upsert_record "loggregator.sys" "$LOGGREGATOR_LB_IP" && echo "Updated loggregator.sys -> $LOGGREGATOR_LB_IP"
+        upsert_record "*" "$MAIN_LB_IP" && echo "Updated *.${DOMAIN} -> $MAIN_LB_IP"
+        upsert_record "@" "$MAIN_LB_IP" && echo "Updated ${DOMAIN} -> $MAIN_LB_IP"
+        upsert_record "ssh.sys" "$SSH_LB_IP" && echo "Updated ssh.sys -> $SSH_LB_IP"
+        upsert_record "tcp.sys" "$TCP_LB_IP" && echo "Updated tcp.sys -> $TCP_LB_IP"
+        if [[ $? -eq 0 ]]; then
+          echo "::notice::DNS records configured successfully"
           echo "success=true" >> $GITHUB_OUTPUT
         else
-          echo "::error::DNS setup failed. Check Cloudflare API errors above."
+          echo "::error::DNS setup failed"
           echo "success=false" >> $GITHUB_OUTPUT
           exit 1
         fi
@@ -252,5 +144,5 @@ runs:
       run: |
         set -euo pipefail
         echo "Cleanup: Removing temp state if partial failure"
-        rm -rf bbl-state/*.yml bbl-state/vars/ || true  
+        rm -rf bbl-state/*.yml bbl-state/vars/ || true
         echo "Cleanup complete"
