@@ -1,29 +1,43 @@
-name: 'Setup Cloudflare DNS'
-description: 'Configure DNS records for CF deployment based on BBL state vars files'
+# .github/actions/setup-cloudflare-dns/action.yml
+
+name: 'Setup Cloudflare DNS for CF Environment'
+description: 'Extract IPs from BOSH vars YAML files in BBL state repo and create/update DNS records in Cloudflare'
 
 inputs:
   env_name:
-    description: 'BBL environment name'
+    description: 'Environment name (used for vars file paths in BBL state repo)'
     required: true
+    default: 'cflinuxfs5'
   bbl_state_repo:
-    description: 'BBL state repo (owner/repo)'
+    description: 'BBL state repository (cloned for vars files)'
     required: true
+    default: 'ivo1116/buildpacks-envs'  # Default from main workflow
   bbl_state_branch:
     description: 'BBL state branch'
-    required: false
-    default: main
+    required: true
+    default: 'main'
   system_domain:
     description: 'System domain (e.g., sisle.org)'
     required: true
+    default: 'sisle.org'
 
 outputs:
   success:
     description: 'Whether DNS setup succeeded'
-    value: ${{ steps.dns.outputs.success }}
+    value: ${{ steps.setup-dns.outputs.success }}
 
 runs:
   using: 'composite'
   steps:
+    - name: Install dependencies (yq and jq)
+      shell: bash
+      run: |
+        # Install yq
+        sudo snap install yq
+        # Install jq (usually available, but ensure)
+        sudo apt-get update
+        sudo apt-get install -y jq
+
     - name: Checkout BBL state repo
       uses: actions/checkout@v4
       with:
@@ -33,116 +47,137 @@ runs:
         path: bbl-state
         persist-credentials: false
 
-    - name: Install BBL, jq, yq, and CF CLI
+    - name: Extract IPs from YAML files
+      id: extract-ips
       shell: bash
       run: |
-        set -euo pipefail
-        sudo apt-get update && sudo apt-get install -y jq
-        wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-        chmod +x /usr/local/bin/yq
-        wget -O /tmp/bbl https://github.com/cloudfoundry/bosh-bootloader/releases/download/v9.0.36/bbl-v9.0.36_linux_amd64
-        chmod +x /tmp/bbl && sudo mv /tmp/bbl /usr/local/bin/bbl
-        wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key | sudo apt-key add -
-        echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
-        sudo apt-get update && sudo apt-get install -y cf8-cli
-        echo "Tools installed: jq, yq, bbl, cf-cli"
-        yq --version  
+        # Vars files are in cloned BBL state repo at bbl-state/{env_name}/vars/
+        ENV_NAME="${{ inputs.env_name }}"
+        JUMBOX_VARS="bbl-state/${ENV_NAME}/vars/jumpbox-vars-file.yml"
+        DIRECTOR_VARS="bbl-state/${ENV_NAME}/vars/director-vars-file.yml"
+        SYS_SUBDOMAIN="sys"  # Fixed as per standard CF
 
-    - name: Setup Cloudflare DNS Records
-      id: dns
+        if [[ ! -f "$JUMBOX_VARS" || ! -f "$DIRECTOR_VARS" ]]; then
+          echo "Error: YAML files not found at $JUMBOX_VARS and $DIRECTOR_VARS"
+          echo "success=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        ROUTER_LB_IP=$(yq eval '.router_lb_ip' "$JUMBOX_VARS")
+        SSH_PROXY_LB_IP=$(yq eval '.ssh_proxy_lb_ip' "$JUMBOX_VARS")
+        TCP_ROUTER_LB_IP=$(yq eval '.tcp_router_lb_ip' "$JUMBOX_VARS")
+        WS_LB_IP=$(yq eval '.ws_lb_ip' "$JUMBOX_VARS")
+
+        # Validate consistency with director vars (optional)
+        if [[ "$(yq eval '.router_lb_ip' "$DIRECTOR_VARS")" != "$ROUTER_LB_IP" ]]; then
+          echo "Warning: router_lb_ip mismatch between files."
+        fi
+
+        # Output IPs as step outputs and env for next steps
+        echo "router_lb_ip=$ROUTER_LB_IP" >> $GITHUB_OUTPUT
+        echo "ssh_proxy_lb_ip=$SSH_PROXY_LB_IP" >> $GITHUB_OUTPUT
+        echo "tcp_router_lb_ip=$TCP_ROUTER_LB_IP" >> $GITHUB_OUTPUT
+        echo "ws_lb_ip=$WS_LB_IP" >> $GITHUB_OUTPUT
+
+        # Export as env for the next step
+        echo "ROUTER_LB_IP=$ROUTER_LB_IP" >> $GITHUB_ENV
+        echo "SSH_PROXY_LB_IP=$SSH_PROXY_LB_IP" >> $GITHUB_ENV
+        echo "TCP_ROUTER_LB_IP=$TCP_ROUTER_LB_IP" >> $GITHUB_ENV
+        echo "WS_LB_IP=$WS_LB_IP" >> $GITHUB_ENV
+        echo "DOMAIN=${{ inputs.system_domain }}" >> $GITHUB_ENV
+        echo "SYS_SUBDOMAIN=$SYS_SUBDOMAIN" >> $GITHUB_ENV
+
+        echo "Extracted IPs:"
+        echo "  router_lb_ip: $ROUTER_LB_IP"
+        echo "  ssh_proxy_lb_ip: $SSH_PROXY_LB_IP"
+        echo "  tcp_router_lb_ip: $TCP_ROUTER_LB_IP"
+        echo "  ws_lb_ip: $WS_LB_IP"
+
+    - name: Validate Cloudflare secrets
       shell: bash
       run: |
-        set -euo pipefail
-        BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
-        DOMAIN="${{ inputs.system_domain }}"
-        VARS_DIR="$BBL_STATE_DIR/vars"
-        DIRECTOR_VARS_FILE="$VARS_DIR/director-vars-file.yml"
-        JUMPBOX_VARS_FILE="$VARS_DIR/jumpbox-vars-file.yml"
-        if [[ ! -d "$BBL_STATE_DIR/vars" ]]; then
-          echo "Error: vars dir not found in $BBL_STATE_DIR/vars"
-          echo "success=false" >> $GITHUB_OUTPUT
+        if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ZONE_ID" ]]; then
+          echo "Error: CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set."
           exit 1
         fi
-        if [[ -f "$DIRECTOR_VARS_FILE" ]]; then
-          VARS_FILE="$DIRECTOR_VARS_FILE"
-        elif [[ -f "$JUMPBOX_VARS_FILE" ]]; then
-          VARS_FILE="$JUMPBOX_VARS_FILE"
-        else
-          echo "Error: No vars YML files found"
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        eval "$(bbl print-env --state-dir "$BBL_STATE_DIR")"
-        ROUTER_LB_IP=$(yq eval -r '.router_lb_ip // ""' "$VARS_FILE")
-        SSH_PROXY_LB_IP=$(yq eval -r '.ssh_proxy_lb_ip // ""' "$VARS_FILE")
-        TCP_ROUTER_LB_IP=$(yq eval -r '.tcp_router_lb_ip // ""' "$VARS_FILE")
-        WS_LB_IP=$(yq eval -r '.ws_lb_ip // ""' "$VARS_FILE")
-        EXTERNAL_IP=$(yq eval -r '.external_ip // ""' "$VARS_FILE")
-        DIRECTOR_ADDR=$(yq eval -r '.director_address // ""' "$VARS_FILE")
-        DIRECTOR_IP=$(echo "$DIRECTOR_ADDR" | sed 's|https\?://||' | sed 's|:.*||')
-        MAIN_LB_IP="${ROUTER_LB_IP:-${WS_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-''}}}}"
-        SSH_LB_IP="${SSH_PROXY_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-${MAIN_LB_IP:-''}}}}"
-        TCP_LB_IP="${TCP_ROUTER_LB_IP:-${MAIN_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-''}}}}"
-        DOPPLER_LB_IP="${WS_LB_IP:-${MAIN_LB_IP:-${EXTERNAL_IP:-${DIRECTOR_IP:-''}}}}"
-        LOGGREGATOR_LB_IP="$DOPPLER_LB_IP"
-        if [[ -z "$MAIN_LB_IP" ]]; then
-          echo "Error: No main IP found"
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
-        API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-        if [[ -z "$ZONE_ID" || -z "$API_TOKEN" ]]; then
-          echo "Error: Missing Cloudflare secrets"
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-        upsert_record() {
-          local name="$1"  
+        echo "Cloudflare credentials validated."
+
+    - name: Create or Update DNS Records
+      id: setup-dns
+      shell: bash
+      run: |
+        # Function to create or patch a DNS record
+        create_or_update_record() {
+          local name="$1"
           local ip="$2"
           local record_type="A"
-          local api_name="$name"
-          if [[ "$name" == "@" ]]; then
-            api_name=""
-          fi
-          local query_name="$api_name"
-          local existing_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?type=$record_type&name=${query_name:-.}.${DOMAIN}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
-          if [[ -n "$existing_id" ]]; then
-            local success=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$existing_id" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty')
-            if [[ "$success" == "true" ]]; then
-              echo "Updated $name.$DOMAIN -> $ip"
-              return 0
+          local proxied=false  # DNS only (no proxy)
+
+          # First, check if record exists (GET request)
+          local existing_record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+
+          local record_id=$(echo "$existing_record" | jq -r '.result[0].id // empty')
+
+          if [[ "$record_id" == "null" || -z "$record_id" ]]; then
+            # Create new record
+            echo "Creating new record: $name -> $ip"
+            local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{
+                \"type\": \"$record_type\",
+                \"name\": \"$name\",
+                \"content\": \"$ip\",
+                \"ttl\": 1,
+                \"proxied\": $proxied
+              }")
+
+            if echo "$response" | jq -e '.success' >/dev/null; then
+              echo "Successfully created: $name"
+            else
+              echo "Failed to create $name: $(echo "$response" | jq -r '.errors')"
+              return 1
             fi
           else
-            local success=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" --data "{\"type\":\"$record_type\",\"name\":\"$api_name\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq -r '.success // empty')
-            if [[ "$success" == "true" ]]; then
-              echo "Created $name.$DOMAIN -> $ip"
-              return 0
+            # Update existing record
+            echo "Updating existing record: $name -> $ip"
+            local response=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$record_id" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{
+                \"type\": \"$record_type\",
+                \"name\": \"$name\",
+                \"content\": \"$ip\",
+                \"ttl\": 1,
+                \"proxied\": $proxied
+              }")
+
+            if echo "$response" | jq -e '.success' >/dev/null; then
+              echo "Successfully updated: $name"
+            else
+              echo "Failed to update $name: $(echo "$response" | jq -r '.errors')"
+              return 1
             fi
           fi
-          return 1
         }
-        local overall_success=true
-        upsert_record "doppler.sys" "$DOPPLER_LB_IP" && echo "Updated doppler.sys -> $DOPPLER_LB_IP"
-        upsert_record "loggregator.sys" "$LOGGREGATOR_LB_IP" && echo "Updated loggregator.sys -> $LOGGREGATOR_LB_IP"
-        upsert_record "*" "$MAIN_LB_IP" && echo "Updated *.${DOMAIN} -> $MAIN_LB_IP"
-        upsert_record "@" "$MAIN_LB_IP" && echo "Updated ${DOMAIN} -> $MAIN_LB_IP"
-        upsert_record "ssh.sys" "$SSH_LB_IP" && echo "Updated ssh.sys -> $SSH_LB_IP"
-        upsert_record "tcp.sys" "$TCP_LB_IP" && echo "Updated tcp.sys -> $TCP_LB_IP"
-        if [[ $? -eq 0 ]]; then
-          echo "::notice::DNS records configured successfully"
-          echo "success=true" >> $GITHUB_OUTPUT
-        else
-          echo "::error::DNS setup failed"
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
 
-    - name: Cleanup on failure
-      if: failure()
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "Cleanup: Removing temp state if partial failure"
-        rm -rf bbl-state/*.yml bbl-state/vars/ || true
-        echo "Cleanup complete"
+        # Records to create (based on CF standards)
+        # Wildcard app domain (*.sisle.org)
+        create_or_update_record "*" "$ROUTER_LB_IP"
+
+        # Apex domain (sisle.org)
+        create_or_update_record "$DOMAIN" "$ROUTER_LB_IP"
+
+        # Wildcard system domain (*.sys.sisle.org) to gorouter
+        create_or_update_record "*.$SYS_SUBDOMAIN.$DOMAIN" "$ROUTER_LB_IP"
+
+        # Specific system records
+        create_or_update_record "doppler.$SYS_SUBDOMAIN.$DOMAIN" "$WS_LB_IP"
+        create_or_update_record "loggregator.$SYS_SUBDOMAIN.$DOMAIN" "$WS_LB_IP"
+        create_or_update_record "ssh.$SYS_SUBDOMAIN.$DOMAIN" "$SSH_PROXY_LB_IP"
+        create_or_update_record "tcp.$SYS_SUBDOMAIN.$DOMAIN" "$TCP_ROUTER_LB_IP"
+
+        echo "All DNS records configured successfully!"
+        echo "success=true" >> $GITHUB_OUTPUT
