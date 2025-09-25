@@ -9,7 +9,7 @@ inputs:
   bbl_state_repo:
     description: 'BBL state repository (cloned for vars files)'
     required: true
-    default: 'ivo1116/buildpacks-envs'  
+    default: 'ivo1116/buildpacks-envs'  # Default from main workflow
   bbl_state_branch:
     description: 'BBL state branch'
     required: true
@@ -110,38 +110,41 @@ runs:
           local record_type="$2"
 
           echo "Checking for existing records for $name ($record_type)..."
-          local existing_records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
+          local existing_records
+          existing_records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json")
 
-          local records=$(echo "$existing_records" | jq -r '.result[]? | select(.id != null) | .id')
+          # Get all non-null IDs into an array (avoids pipeline subshell issues)
+          local record_ids
+          mapfile -t record_ids < <(echo "$existing_records" | jq -r '.result[]? | select(.id != null) | .id // empty' | grep -v '^$')
 
-          if [[ "$records" == "null" ]] || [[ -z "$records" ]]; then
+          local num_records=${#record_ids[@]}
+          if [[ $num_records -eq 0 ]]; then
             echo "No existing records found for $name."
             return 0
           fi
 
           local count=0
-          echo "$records" | while read -r record_id; do
+          for record_id in "${record_ids[@]}"; do
             if [[ -n "$record_id" && "$record_id" != "null" ]]; then
               echo "Deleting existing record ID: $record_id for $name"
-              local delete_response=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$record_id" \
+              local delete_response
+              delete_response=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$record_id" \
                 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
                 -H "Content-Type: application/json")
 
-              if echo "$delete_response" | jq -e '.success' >/dev/null; then
+              if echo "$delete_response" | jq -e '.success' >/dev/null 2>&1; then
                 echo "Successfully deleted record: $record_id"
-                ((count++))
+                count=$((count + 1))
               else
-                echo "Failed to delete $record_id: $(echo "$delete_response" | jq -r '.errors')"
+                echo "Failed to delete $record_id: $(echo "$delete_response" | jq -r '.errors // "Unknown error"' 2>/dev/null || echo "Invalid JSON response")"
                 return 1
               fi
             fi
           done
 
-          if [[ $count -gt 0 ]]; then
-            echo "Deleted $count duplicate/old records for $name."
-          fi
+          echo "Deleted $count out of $num_records records for $name."
         }
 
         # Function to create a new DNS record
@@ -152,27 +155,29 @@ runs:
           local proxied=false  # DNS only (no proxy)
 
           echo "Creating new record: $name -> $ip"
-          local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
+          local response
+          response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
-            --data "{
-              \"type\": \"$record_type\",
-              \"name\": \"$name\",
-              \"content\": \"$ip\",
-              \"ttl\": 1,
-              \"proxied\": $proxied
-            }")
+            --data-binary @- << EOF
+            {
+              "type": "$record_type",
+              "name": "$name",
+              "content": "$ip",
+              "ttl": 1,
+              "proxied": $proxied
+            }
+            EOF
+            )
 
-          if echo "$response" | jq -e '.success' >/dev/null; then
+          if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
             echo "Successfully created: $name"
+            return 0
           else
-            echo "Failed to create $name: $(echo "$response" | jq -r '.errors')"
+            echo "Failed to create $name. Response: $(echo "$response" | jq -r '.errors // "Unknown error"' 2>/dev/null || echo "Invalid JSON response")"
             return 1
           fi
         }
-
-        # To ensure idempotency and no duplicates: For each record, delete all existing matching (name + type), then create new.
-        # This handles the case where multiples exist (e.g., two *.sisle.org records).
 
         # Records to configure (delete existing, then create)
         local_records=(
@@ -188,13 +193,24 @@ runs:
         all_success=true
         for record in "${local_records[@]}"; do
           IFS=' ' read -r name ip <<< "$record"
-          delete_all_records_for_name "$name" "A"
-          create_record "$name" "$ip" || all_success=false
+          echo "Processing record: $name"
+          if ! delete_all_records_for_name "$name" "A"; then
+            echo "Deletion failed for $name, skipping creation."
+            all_success=false
+            continue
+          fi
+          echo "Deletion complete for $name, proceeding to create."
+          if ! create_record "$name" "$ip"; then
+            echo "Creation failed for $name."
+            all_success=false
+          fi
+          echo "---"  # Separator for logs
         done
 
         if [[ $all_success == true ]]; then
           echo "All DNS records cleaned up and configured successfully!"
           echo "success=true" >> $GITHUB_OUTPUT
+          exit 0
         else
           echo "One or more DNS operations failed."
           echo "success=false" >> $GITHUB_OUTPUT
