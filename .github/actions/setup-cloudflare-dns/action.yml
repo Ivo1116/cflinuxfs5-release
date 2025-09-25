@@ -9,6 +9,7 @@ inputs:
   bbl_state_repo:
     description: 'BBL state repository (cloned for vars files)'
     required: true
+    default: 'ivo1116/buildpacks-envs'  
   bbl_state_branch:
     description: 'BBL state branch'
     required: true
@@ -16,6 +17,7 @@ inputs:
   system_domain:
     description: 'System domain (e.g., sisle.org)'
     required: true
+    default: 'sisle.org'
 
 outputs:
   success:
@@ -28,7 +30,9 @@ runs:
     - name: Install dependencies (yq and jq)
       shell: bash
       run: |
+        # Install yq
         sudo snap install yq
+        # Install jq (usually available, but ensure)
         sudo apt-get update
         sudo apt-get install -y jq
 
@@ -45,10 +49,11 @@ runs:
       id: extract-ips
       shell: bash
       run: |
+        # Vars files are in cloned BBL state repo at bbl-state/{env_name}/vars/
         ENV_NAME="${{ inputs.env_name }}"
         JUMBOX_VARS="bbl-state/${ENV_NAME}/vars/jumpbox-vars-file.yml"
         DIRECTOR_VARS="bbl-state/${ENV_NAME}/vars/director-vars-file.yml"
-        SYS_SUBDOMAIN="sys"  
+        SYS_SUBDOMAIN="sys"  # Fixed as per standard CF
 
         if [[ ! -f "$JUMBOX_VARS" || ! -f "$DIRECTOR_VARS" ]]; then
           echo "Error: YAML files not found at $JUMBOX_VARS and $DIRECTOR_VARS"
@@ -61,15 +66,18 @@ runs:
         TCP_ROUTER_LB_IP=$(yq eval '.tcp_router_lb_ip' "$JUMBOX_VARS")
         WS_LB_IP=$(yq eval '.ws_lb_ip' "$JUMBOX_VARS")
 
+        # Validate consistency with director vars (optional)
         if [[ "$(yq eval '.router_lb_ip' "$DIRECTOR_VARS")" != "$ROUTER_LB_IP" ]]; then
           echo "Warning: router_lb_ip mismatch between files."
         fi
 
+        # Output IPs as step outputs and env for next steps
         echo "router_lb_ip=$ROUTER_LB_IP" >> $GITHUB_OUTPUT
         echo "ssh_proxy_lb_ip=$SSH_PROXY_LB_IP" >> $GITHUB_OUTPUT
         echo "tcp_router_lb_ip=$TCP_ROUTER_LB_IP" >> $GITHUB_OUTPUT
         echo "ws_lb_ip=$WS_LB_IP" >> $GITHUB_OUTPUT
 
+        # Export as env for the next step
         echo "ROUTER_LB_IP=$ROUTER_LB_IP" >> $GITHUB_ENV
         echo "SSH_PROXY_LB_IP=$SSH_PROXY_LB_IP" >> $GITHUB_ENV
         echo "TCP_ROUTER_LB_IP=$TCP_ROUTER_LB_IP" >> $GITHUB_ENV
@@ -96,6 +104,7 @@ runs:
       id: setup-dns
       shell: bash
       run: |
+        # Function to delete all existing records for a given name and type (handles duplicates)
         delete_all_records_for_name() {
           local name="$1"
           local record_type="$2"
@@ -135,11 +144,12 @@ runs:
           fi
         }
 
+        # Function to create a new DNS record
         create_record() {
           local name="$1"
           local ip="$2"
           local record_type="A"
-          local proxied=false  
+          local proxied=false  # DNS only (no proxy)
 
           echo "Creating new record: $name -> $ip"
           local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
@@ -161,17 +171,21 @@ runs:
           fi
         }
 
+        # To ensure idempotency and no duplicates: For each record, delete all existing matching (name + type), then create new.
+        # This handles the case where multiples exist (e.g., two *.sisle.org records).
+
+        # Records to configure (delete existing, then create)
         local_records=(
-          "* $ROUTER_LB_IP"  
-          "$DOMAIN $ROUTER_LB_IP"  
-          "*.$SYS_SUBDOMAIN.$DOMAIN $ROUTER_LB_IP"  
+          "* $ROUTER_LB_IP"  # Wildcard app domain (*.sisle.org)
+          "$DOMAIN $ROUTER_LB_IP"  # Apex domain (sisle.org)
+          "*.$SYS_SUBDOMAIN.$DOMAIN $ROUTER_LB_IP"  # Wildcard system domain (*.sys.sisle.org)
           "doppler.$SYS_SUBDOMAIN.$DOMAIN $WS_LB_IP"
           "loggregator.$SYS_SUBDOMAIN.$DOMAIN $WS_LB_IP"
           "ssh.$SYS_SUBDOMAIN.$DOMAIN $SSH_PROXY_LB_IP"
           "tcp.$SYS_SUBDOMAIN.$DOMAIN $TCP_ROUTER_LB_IP"
         )
 
-        local all_success=true
+        all_success=true
         for record in "${local_records[@]}"; do
           IFS=' ' read -r name ip <<< "$record"
           delete_all_records_for_name "$name" "A"
