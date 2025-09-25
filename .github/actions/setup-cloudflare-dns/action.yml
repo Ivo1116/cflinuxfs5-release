@@ -41,7 +41,7 @@ runs:
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
-        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}  
+        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
         path: bbl-state
         persist-credentials: false
 
@@ -159,16 +159,13 @@ runs:
           response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
-            --data-binary @- << EOF
-            {
-              "type": "$record_type",
-              "name": "$name",
-              "content": "$ip",
+            --data '{
+              "type": "'"$record_type"'",
+              "name": "'"$name"'",
+              "content": "'"$ip"'",
               "ttl": 1,
-              "proxied": $proxied
-            }
-            EOF
-            )
+              "proxied": '"$proxied"'"
+            }')
 
           if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
             echo "Successfully created: $name"
@@ -199,6 +196,7 @@ runs:
             all_success=false
             continue
           fi
+          sleep 1  # Brief delay for API propagation (optional)
           echo "Deletion complete for $name, proceeding to create."
           if ! create_record "$name" "$ip"; then
             echo "Creation failed for $name."
