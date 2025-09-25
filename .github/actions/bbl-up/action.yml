@@ -25,8 +25,7 @@ inputs:
     default: 'us-central1'
   lb_domain:
     description: 'Load balancer domain'
-    required: false
-    default: 'sisle.org'
+    required: true
   bbl_state_repo:
     description: 'Repo for BBL state (owner/repo)'
     required: true
