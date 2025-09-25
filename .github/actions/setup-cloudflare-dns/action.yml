@@ -1,3 +1,5 @@
+# .github/actions/setup-cloudflare-dns/action.yml
+
 name: 'Setup Cloudflare DNS for CF Environment'
 description: 'Extract IPs from BOSH vars YAML files in BBL state repo, clean up duplicate DNS records in Cloudflare, and create/update DNS records'
 
@@ -155,23 +157,30 @@ runs:
           local proxied=false  # DNS only (no proxy)
 
           echo "Creating new record: $name -> $ip"
+
+          # Generate clean JSON payload using jq (handles quoting, wildcards, booleans safely)
+          local json_payload
+          json_payload=$(jq -n \
+            --arg type "$record_type" \
+            --arg name "$name" \
+            --arg content "$ip" \
+            --argjson ttl 1 \
+            --argjson proxied false \
+            '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')
+
+          echo "Generated JSON payload (for debug): $json_payload"
+
           local response
           response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
-            --data '{
-              "type": "'"$record_type"'",
-              "name": "'"$name"'",
-              "content": "'"$ip"'",
-              "ttl": 1,
-              "proxied": '"$proxied"'"
-            }')
+            --data "$json_payload")
 
           if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
             echo "Successfully created: $name"
             return 0
           else
-            echo "Failed to create $name. Response: $(echo "$response" | jq -r '.errors // "Unknown error"' 2>/dev/null || echo "Invalid JSON response")"
+            echo "Failed to create $name. Response: $(echo "$response" | jq -r '.errors[]? | .message // "Unknown error"' 2>/dev/null || echo "Invalid JSON response")"
             return 1
           fi
         }
