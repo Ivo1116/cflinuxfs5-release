@@ -1,5 +1,3 @@
-# .github/actions/setup-cloudflare-dns/action.yml
-
 name: 'Setup Cloudflare DNS for CF Environment'
 description: 'Extract IPs from BOSH vars YAML files in BBL state repo, clean up duplicate DNS records in Cloudflare, and create/update DNS records'
 
@@ -96,7 +94,7 @@ runs:
     - name: Validate Cloudflare secrets
       shell: bash
       run: |
-        if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ZONE_ID" ]]; then
+        if [[ ! -z "$CLOUDFLARE_API_TOKEN" || ! -z "$CLOUDFLARE_ZONE_ID" ]]; then
           echo "Error: CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set."
           exit 1
         fi
@@ -106,59 +104,50 @@ runs:
       id: setup-dns
       shell: bash
       run: |
-        # Function to delete all existing records for a given name and type (handles duplicates)
-        delete_all_records_for_name() {
+        # Function to upsert (create or update) a DNS record (handles duplicates and existing records robustly)
+        upsert_dns_record() {
           local name="$1"
-          local record_type="$2"
+          local ip="$2"
+          local record_type="A"
+          local proxied=false  # DNS only
 
-          echo "Checking for existing records for $name ($record_type)..."
+          echo "Processing DNS record: $name -> $ip"
+
+          # Step 1: Check for existing records with this name and type (handles multiple if any)
           local existing_records
           existing_records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json")
 
-          # Get all non-null IDs into an array (avoids pipeline subshell issues)
-          local record_ids
-          mapfile -t record_ids < <(echo "$existing_records" | jq -r '.result[]? | select(.id != null) | .id // empty' | grep -v '^$')
+          # Collect all IDs to delete extras (cleanup duplicates)
+          local ids_to_delete
+          mapfile -t ids_to_delete < <(echo "$existing_records" | jq -r '.result[]? | select(.id != null) | .id // empty' | grep -v '^$')
+          local num_existing=${#ids_to_delete[@]}
 
-          local num_records=${#record_ids[@]}
-          if [[ $num_records -eq 0 ]]; then
-            echo "No existing records found for $name."
-            return 0
+          if [[ $num_existing -gt 0 ]]; then
+            # Delete all existing to avoid conflicts, then recreate (or keep one for update)
+            for id in "${ids_to_delete[@]}"; do
+              if [[ -n "$id" && "$id" != "null" ]]; then
+                echo "Deleting duplicate existing record ID: $id for $name"
+                local delete_response
+                delete_response=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$id" \
+                  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                  -H "Content-Type: application/json")
+                if echo "$delete_response" | jq -e '.success' >/dev/null 2>&1; then
+                  echo "Successfully deleted duplicate: $id"
+                else
+                  echo "Failed to delete duplicate $id: $(echo "$delete_response" | jq -r '.errors[]? | .message // "Unknown"' 2>/dev/null || echo "Error")"
+                  return 1
+                fi
+              fi
+            done
+            echo "Cleaned up $num_existing existing records for $name."
+            sleep 2  # Delay for propagation
+          else
+            echo "No existing DNS records found for $name."
           fi
 
-          local count=0
-          for record_id in "${record_ids[@]}"; do
-            if [[ -n "$record_id" && "$record_id" != "null" ]]; then
-              echo "Deleting existing record ID: $record_id for $name"
-              local delete_response
-              delete_response=$(curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$record_id" \
-                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                -H "Content-Type: application/json")
-
-              if echo "$delete_response" | jq -e '.success' >/dev/null 2>&1; then
-                echo "Successfully deleted record: $record_id"
-                count=$((count + 1))
-              else
-                echo "Failed to delete $record_id: $(echo "$delete_response" | jq -r '.errors // "Unknown error"' 2>/dev/null || echo "Invalid JSON response")"
-                return 1
-              fi
-            fi
-          done
-
-          echo "Deleted $count out of $num_records records for $name."
-        }
-
-        # Function to create a new DNS record
-        create_record() {
-          local name="$1"
-          local ip="$2"
-          local record_type="A"
-          local proxied=false  # DNS only (no proxy)
-
-          echo "Creating new record: $name -> $ip"
-
-          # Generate clean JSON payload using jq (handles quoting, wildcards, booleans safely)
+          # Step 2: Generate JSON payload using jq
           local json_payload
           json_payload=$(jq -n \
             --arg type "$record_type" \
@@ -167,9 +156,9 @@ runs:
             --argjson ttl 1 \
             --argjson proxied false \
             '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')
+          echo "Generated JSON payload for $name: $json_payload"
 
-          echo "Generated JSON payload (for debug): $json_payload"
-
+          # Step 3: Try to create the record
           local response
           response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -177,15 +166,46 @@ runs:
             --data "$json_payload")
 
           if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
-            echo "Successfully created: $name"
+            echo "Successfully created new record: $name"
             return 0
           else
-            echo "Failed to create $name. Response: $(echo "$response" | jq -r '.errors[]? | .message // "Unknown error"' 2>/dev/null || echo "Invalid JSON response")"
-            return 1
+            local error_msg
+            error_msg=$(echo "$response" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null || echo "Invalid response")
+            if [[ "$error_msg" == "An identical record already exists." ]]; then
+              echo "Identical record exists for $name; attempting update..."
+              # Fetch the existing ID and update (for cases where create fails but record exists)
+              local existing_after_create
+              existing_after_create=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                -H "Content-Type: application/json")
+              local existing_id
+              existing_id=$(echo "$existing_after_create" | jq -r '.result[0].id // empty')
+              if [[ -n "$existing_id" && "$existing_id" != "null" ]]; then
+                local update_response
+                update_response=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$existing_id" \
+                  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  --data "$json_payload")
+                if echo "$update_response" | jq -e '.success' >/dev/null 2>&1; then
+                  echo "Successfully updated existing record: $name"
+                  return 0
+                else
+                  echo "Failed to update $name: $(echo "$update_response" | jq -r '.errors[0].message // "Update error"' 2>/dev/null || echo "Error")"
+                  return 1
+                fi
+              else
+                echo "No ID found for update on $name."
+                return 1
+              fi
+            else
+              echo "Failed to create or update $name: $error_msg"
+              echo "Full response: $response"
+              return 1
+            fi
           fi
         }
 
-        # Records to configure (delete existing, then create)
+        # Records to configure
         local_records=(
           "* $ROUTER_LB_IP"  # Wildcard app domain (*.sisle.org)
           "$DOMAIN $ROUTER_LB_IP"  # Apex domain (sisle.org)
@@ -199,23 +219,15 @@ runs:
         all_success=true
         for record in "${local_records[@]}"; do
           IFS=' ' read -r name ip <<< "$record"
-          echo "Processing record: $name"
-          if ! delete_all_records_for_name "$name" "A"; then
-            echo "Deletion failed for $name, skipping creation."
-            all_success=false
-            continue
-          fi
-          sleep 1  # Brief delay for API propagation (optional)
-          echo "Deletion complete for $name, proceeding to create."
-          if ! create_record "$name" "$ip"; then
-            echo "Creation failed for $name."
+          if ! upsert_dns_record "$name" "$ip"; then
+            echo "Upsert failed for $name."
             all_success=false
           fi
           echo "---"  # Separator for logs
         done
 
         if [[ $all_success == true ]]; then
-          echo "All DNS records cleaned up and configured successfully!"
+          echo "All DNS records configured successfully!"
           echo "success=true" >> $GITHUB_OUTPUT
           exit 0
         else
