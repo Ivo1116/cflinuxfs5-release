@@ -144,7 +144,7 @@ runs:
           "skip_ssl_validation": true,
           "use_existing_organization": false,
           "use_existing_space": false,
-          "include_apps": false,
+          "include_apps": true,
           "include_detect": true,
           "include_backend_compatibility": false,
           "include_docker": false,
