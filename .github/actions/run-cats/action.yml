@@ -168,9 +168,9 @@ runs:
           "skip_php": true,
           "skip_dotnet": true,
           "skip_staticfile": false,
-          "go_buildpack_name": "cats_go_buildpack_fs5"
-          "nginx_buildpack_name": "cats_staticfile_buildpack_fs5"
-          "nodejs_buildpack_name": "cats_nodejs_buildpack_fs5"
+          "go_buildpack_name": "cats_go_buildpack_fs5",
+          "nginx_buildpack_name": "cats_staticfile_buildpack_fs5",
+          "nodejs_buildpack_name": "cats_nodejs_buildpack_fs5",
           "python_buildpack_name": "cats_python_buildpack_fs5"
         }
         EOF
