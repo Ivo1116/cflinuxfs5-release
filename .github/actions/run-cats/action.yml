@@ -129,6 +129,14 @@ runs:
         cf create-buildpack cats_staticfile_buildpack_fs5 "https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPWqx4jHLc0hYwfFZnEx9CoQWpjeHM1LruKXJN" 1
         cf update-buildpack cats_staticfile_buildpack_fs5 --assign-stack cflinuxfs5
 
+    - name: Upload Binary buildpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf delete-buildpack binary_buildpack -f || true
+        cf create-buildpack binary_buildpack "https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kP361kcIMBSlE41WVDgbYQamtHMPncOA8KuCoJ" 1
+        cf update-buildpack binary_buildpack --assign-stack cflinuxfs5
+
     - name: Create CATS config
       id: config
       shell: bash
@@ -195,3 +203,9 @@ runs:
       run: |
         set -euo pipefail
         cf delete-buildpack cats_go_buildpack_fs5 -f || true
+
+    - name: Delete uploaded Binary buildpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf delete-buildpack binary_buildpack -f || true
