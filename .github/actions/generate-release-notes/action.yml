@@ -11,6 +11,11 @@ inputs:
   previous_version:
     description: 'Previous release tag to reference (optional)'
     required: false
+    default: ''
+  type:
+    description: 'Type to generate notes for: stack (rootfs/source) or release (final tgz artifact)'
+    required: true 
+    default: 'release'
 
 runs:
   using: 'composite'
@@ -29,8 +34,16 @@ runs:
           fi
           echo
           echo "Changes:"
-          echo "- Rootfs finalized from RC"
-          echo "- See receipt for package updates"
+          case "${{ inputs.type }}" in
+            "stack")
+              echo "- Updated rootfs packages and dependencies"
+              echo "- See commit history for detailed changes"
+              ;;
+            "release")
+              echo "- Rootfs finalized from RC"
+              echo "- See receipt for package updates"
+              ;;
+          esac
         } > release-body/body
         
-        echo "Release notes generated for ${{ inputs.current_version }}"
+        echo "Release notes generated for ${{ inputs.stack }} (type: ${{ inputs.type }}) ${{ inputs.current_version }}"

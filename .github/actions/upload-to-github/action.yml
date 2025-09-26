@@ -63,10 +63,10 @@ runs:
         artifact_type: receipt
 
     - name: Generate release notes
-      if: ${{ inputs.type == 'stack' }}
       uses: ./.github/actions/generate-release-notes
       with:
         stack: ${{ inputs.stack }}
+        type: ${{ inputs.type }}
         current_version: ${{ inputs.version }}
         previous_version: ${{ inputs.previous_version }}
 
