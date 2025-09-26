@@ -117,6 +117,7 @@ runs:
       with:
         github_token: ${{ inputs.github_token }}
         stack: ${{ inputs.stack }}
+        bucket_name: ${{ inputs.bucket_name }}
         type: release
         version: ${{ inputs.version }}
         owner: ${{ inputs.owner }}
