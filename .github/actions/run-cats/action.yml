@@ -105,6 +105,30 @@ runs:
         cf create-buildpack cats_go_buildpack_fs5 "${{ inputs.go_buildpack_path }}" 1
         cf update-buildpack cats_go_buildpack_fs5 --assign-stack cflinuxfs5
 
+    - name: Upload Node.js buildpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf delete-buildpack cats_nodejs_buildpack_fs5 -f || true
+        cf create-buildpack cats_nodejs_buildpack_fs5 "https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPEsEtCHKh6AIfCm0e3PiDdbNpYMEzTuOkrgs7" 1
+        cf update-buildpack cats_nodejs_buildpack_fs5 --assign-stack cflinuxfs5
+
+    - name: Upload Python buildpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf delete-buildpack cats_python_buildpack_fs5 -f || true
+        cf create-buildpack cats_python_buildpack_fs5 "https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPcEArVMD2FVhQzX9fjT81MWLlu2ygOeI65wbB" 1
+        cf update-buildpack cats_python_buildpack_fs5 --assign-stack cflinuxfs5
+
+    - name: Upload Staticfile (Nginx) buildpack
+      shell: bash
+      run: |
+        set -euo pipefail
+        cf delete-buildpack cats_staticfile_buildpack_fs5 -f || true
+        cf create-buildpack cats_staticfile_buildpack_fs5 "https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPWqx4jHLc0hYwfFZnEx9CoQWpjeHM1LruKXJN" 1
+        cf update-buildpack cats_staticfile_buildpack_fs5 --assign-stack cflinuxfs5
+
     - name: Create CATS config
       id: config
       shell: bash
@@ -137,14 +161,17 @@ runs:
           "include_app_syslog_tcp": false,
           "skip_diego_unsupported_tests": true,
           "skip_go": false,
-          "skip_node": true,
+          "skip_node": false,
           "skip_java": true,
           "skip_ruby": true,
-          "skip_python": true,
+          "skip_python": false,
           "skip_php": true,
           "skip_dotnet": true,
-          "skip_staticfile": true,
+          "skip_staticfile": false,
           "go_buildpack_name": "cats_go_buildpack_fs5"
+          "nginx_buildpack_name": "cats_staticfile_buildpack_fs5"
+          "nodejs_buildpack_name": "cats_nodejs_buildpack_fs5"
+          "python_buildpack_name": "cats_python_buildpack_fs5"
         }
         EOF
         echo "config=$CONFIG_FILE" >> $GITHUB_OUTPUT
