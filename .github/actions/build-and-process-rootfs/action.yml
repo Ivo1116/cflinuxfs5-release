@@ -74,21 +74,21 @@ runs:
     - name: Upload stack to S3
       uses: ./.github/actions/upload-s3
       with:
-        upload_type: stack-s3
+        upload_type: stack
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
 
     - name: Upload receipt to S3
       uses: ./.github/actions/upload-s3
       with:
-        upload_type: receipt-s3
+        upload_type: receipt
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
 
     - name: Upload BOSH release to S3
       uses: ./.github/actions/upload-s3
       with:
-        upload_type: release-s3
+        upload_type: release
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
         file: rootfs-artifacts/${{ inputs.stack }}-release-${{ inputs.version }}.tgz

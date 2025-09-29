@@ -96,13 +96,13 @@ runs:
     - name: Upload final stack to S3
       uses: ./.github/actions/upload-s3
       with:
-        upload_type: stack-s3
+        upload_type: stack
         version: ${{ inputs.final_version }}
         bucket_name: ${{ inputs.bucket_name }}
 
     - name: Upload final receipt to S3
       uses: ./.github/actions/upload-s3
       with:
-        upload_type: receipt-s3
+        upload_type: receipt
         version: ${{ inputs.final_version }}
         bucket_name: ${{ inputs.bucket_name }}

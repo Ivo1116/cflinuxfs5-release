@@ -93,7 +93,7 @@ runs:
     - name: Upload BOSH release to S3
       uses: ./.github/actions/upload-s3
       with:
-        upload_type: release-s3
+        upload_type: release
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
         file: rootfs-artifacts/${{ inputs.stack }}-release-${{ inputs.version }}.tgz
