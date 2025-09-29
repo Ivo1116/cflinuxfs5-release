@@ -277,6 +277,7 @@ jobs:
         with:
           skip_setup: ${{ needs.resolve-inputs.outputs.skip_setup }}
           skip_cats: ${{ needs.resolve-inputs.outputs.skip_cats }}
+          skip_deploy: ${{ needs.resolve-inputs.outputs.skip_deploy }}
           setup_result: ${{ needs.setup-test-environment.result }}
           deployment_ready: ${{ needs.deploy-cf.outputs.deployment_ready }}
           cats_passed: ${{ needs.run-cats.outputs.cats_passed }}

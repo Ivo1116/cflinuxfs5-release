@@ -1,112 +1,62 @@
-name: 'Determine if Build is Needed'
-description: 'Decide whether to trigger a rootfs build based on triggers'
+name: 'Generate Build Summary'
+description: 'Generate build summary for GitHub Actions summary'
 
 inputs:
   cves_detected:
     description: 'CVEs detected flag'
-    required: true
+    required: false
   golang_updated:
     description: 'Golang updated flag'
-    required: true
-  event_name:
-    description: 'GitHub event name'
-    required: true
-  event_action:
-    description: 'GitHub event action (for repository_dispatch)'
-    required: true
-    default: ''
-  trigger_reason:
-    description: 'Manual trigger reason'
     required: false
-    default: ''
-
-outputs:
   should_build:
-    description: 'Whether to proceed with build'
-    value: ${{ steps.decide.outputs.should_build }}
-  reason:
-    description: 'Reason for the decision'
-    value: ${{ steps.decide.outputs.reason }}
+    description: 'Should build flag'
+    required: false
+  trigger_reason:
+    description: 'Build trigger reason'
+    required: false
+  gather_result:
+    description: 'Gather resources result'
+    required: false
+  build_result:
+    description: 'Build result' 
+    required: false
+  version:
+    description: 'Built version' 
+    required: false
+
 
 runs:
   using: 'composite'
   steps:
-    - name: Decide if build is needed
-      id: decide
+    - name: Generate build summary
       shell: bash
       run: |
         set -euo pipefail
-
-        SHOULD_BUILD=false
-        REASON="No triggers met"
-
-        if [[ "${{ inputs.cves_detected }}" == "true" ]]; then
-          SHOULD_BUILD=true
-          REASON="New CVEs detected"
-        fi
-
-        if [[ "${{ inputs.golang_updated }}" == "true" ]]; then
-          SHOULD_BUILD=true
-          if [[ "$REASON" == "No triggers met" ]]; then
-            REASON="Golang packages updated"
+        
+        {
+          echo "## Build Summary"
+          echo ""
+          
+          if [[ "${{ inputs.cves_detected }}" == "true" ]]; then
+            echo "**CVE Check**: New CVEs detected and processed"
           else
-            REASON="$REASON and Golang updated"
+            echo "**CVE Check**: No new CVEs found"
           fi
-        fi
-
-        if [[ "${{ inputs.event_name }}" == "schedule" ]]; then
-          SHOULD_BUILD=true
-          if [[ "$REASON" == "No triggers met" ]]; then
-            REASON="Scheduled build"
+          
+          if [[ "${{ inputs.golang_updated }}" == "true" ]]; then
+            echo "**Golang Check**: Golang packages updated"
           else
-            REASON="$REASON (scheduled)"
+            echo "**Golang Check**: No Golang updates found"
           fi
-        fi
-
-        if [[ "${{ inputs.event_name }}" == "repository_dispatch" ]]; then
-          case "${{ inputs.event_action }}" in
-            "cve-update")
-              SHOULD_BUILD=true
-              if [[ "$REASON" == "No triggers met" ]]; then
-                REASON="CVE update from repository_dispatch"
-              else
-                REASON="$REASON (CVE dispatch)"
-              fi
-              ;;
-            "golang-update")
-              SHOULD_BUILD=true
-              if [[ "$REASON" == "No triggers met" ]]; then
-                REASON="Golang update from repository_dispatch"
-              else
-                REASON="$REASON (Golang dispatch)"
-              fi
-              ;;
-            "rootfs-change")
-              SHOULD_BUILD=true
-              if [[ "$REASON" == "No triggers met" ]]; then
-                REASON="Rootfs change from repository_dispatch"
-              else
-                REASON="$REASON (Rootfs dispatch)"
-              fi
-              ;;
-          esac
-        fi
-
-        if [[ "${{ inputs.event_name }}" == "workflow_dispatch" ]]; then
-          SHOULD_BUILD=true
-          if [[ "$REASON" == "No triggers met" ]]; then
-            REASON="${{ inputs.trigger_reason || 'Manual trigger' }}"
+          
+          if [[ "${{ inputs.should_build }}" == "true" ]]; then
+            echo "**Build**: ${{ inputs.trigger_reason }}"
+            if [[ "${{ inputs.gather_result }}" == "success" && "${{ inputs.build_result }}" == "success" ]]; then
+              echo "**Result**: Build completed successfully (v${{ inputs.version }})"
+            else
+              echo "**Result**: Build failed"
+            fi
           else
-            REASON="$REASON (manual override)"
+            echo "**Build**: Skipped - no trigger conditions met"
           fi
-        fi
-
-        # If still no reason, it's a false manual or other non-trigger
-        if [[ "$SHOULD_BUILD" == "false" ]]; then
-          REASON="No trigger conditions met"
-        fi
-
-        echo "::set-output name=should_build::$SHOULD_BUILD"
-        echo "::set-output name=reason::$REASON"
-
-        echo "Decision: should_build=$SHOULD_BUILD, reason=$REASON"
+        } >> "$GITHUB_STEP_SUMMARY"

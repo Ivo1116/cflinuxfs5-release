@@ -8,6 +8,9 @@ inputs:
   skip_cats:
     description: 'Skip CATs flag'
     required: false
+  skip_deploy:
+    description: 'Skip Deploy CF flag'
+    required: false
   setup_result:
     description: 'Setup result'
     required: false
@@ -70,7 +73,7 @@ runs:
           echo "**Version Tested**: ${{ inputs.version || 'N/A' }}"
           
           # Determine overall result
-          if [[ "${{ inputs.deployment_ready }}" == "true" && \
+          if [[ ("${{ inputs.deployment_ready }}" == "true" || "${{ inputs.skip_deploy }}" == "true") && \
                 ( "${{ inputs.skip_cats }}" == "true" || "${{ inputs.cats_passed }}" == "true" ) && \
                 "${{ inputs.race_check_passed }}" == "true" ]]; then
             echo "**Overall Result**: All tests passed - ready for release"
