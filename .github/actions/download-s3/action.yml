@@ -3,7 +3,7 @@ description: 'Download artifacts from S3'
 
 inputs:
   stack:
-    description: 'Stack name (e.g., cflinuxfs5)'
+    description: 'Stack name (e.g., {your-cflinuxfs-version})'
     required: true
   version:
     description: 'Version number'
@@ -29,6 +29,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+
         STACK="${{ inputs.stack }}"
         VERSION="${{ inputs.version }}"
         BUCKET="${{ inputs.bucket_name }}"

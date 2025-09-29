@@ -1,5 +1,5 @@
-name: 'Deploy CF with cflinuxfs5'
-description: 'Deploy Cloud Foundry to a bbl environment using the cflinuxfs5 stack'
+name: 'Deploy CF with ${{ env.STACK }}'
+description: 'Deploy Cloud Foundry to a bbl environment using the ${{ env.STACK }} stack'
 
 inputs:
   env_name:
@@ -9,7 +9,7 @@ inputs:
     description: 'cflinux stack to be used for deployment'
     required: true
   version:
-    description: 'cflinuxfs5 version (e.g., 1.0.0-rc.1)'
+    description: 'cflinuxfs version (e.g., 1.0.0-rc.1)'
     required: true
   bbl_state_repo:
     description: 'Repo holding bbl state (owner/repo)'
@@ -22,8 +22,8 @@ inputs:
     description: 'Git repo conataining the ops file'
     required: true
   ops_file:
-    description: 'use cflinuxfs5 ops file'
-    default: "ops-file/use-cflinuxfs5.yml"
+    description: 'use cflinuxfs ops file'
+    default: "ops-file/use-{your-cflinuxfs-version}.yml"
     required: true
   system_domain:
     description: 'System domain for CF'
@@ -101,7 +101,7 @@ runs:
         eval "$(bbl print-env --state-dir $BBL_STATE_DIR)"
         bosh upload-stemcell https://bosh.io/d/stemcells/bosh-google-kvm-ubuntu-noble?v=1.25
 
-    - name: Upload cflinuxfs5 release
+    - name: Upload cflinux release
       shell: bash
       run: |
         set -euo pipefail
@@ -111,7 +111,7 @@ runs:
         eval "$(bbl print-env --state-dir $BBL_STATE_DIR)"
         bosh upload-release rootfs-artifacts/${STACK}-release-${VERSION}.tgz
 
-    - name: Deploy CF with cflinuxfs5
+    - name: Deploy CF with ${{ env.STACK }}
       id: deploy
       shell: bash
       run: |

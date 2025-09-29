@@ -6,7 +6,7 @@ inputs:
     description: 'S3 bucket name'
     required: true
   key:
-    description: 'S3 object key to write (e.g., versions/stack-cflinuxfs5)'
+    description: 'S3 object key to write (e.g., versions/stack-{your-cflinuxfs-version})'
     required: true
   version:
     description: 'Version string to write'

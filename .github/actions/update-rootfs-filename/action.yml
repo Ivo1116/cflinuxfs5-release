@@ -3,7 +3,7 @@ description: 'Rename rootfs tarball from RC to final version'
 
 inputs:
   stack:
-    description: 'Stack name (e.g. cflinuxfs5)'
+    description: 'Stack name (e.g. {your-cflinuxfs-version})'
     required: true
   rc_version:
     description: 'RC version tag (e.g. 1.2.3-rc.1)'

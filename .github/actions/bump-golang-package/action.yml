@@ -88,7 +88,7 @@ runs:
       run: |
         set -euo pipefail
 
-        CFLINUXFS5_RELEASE_PATH="release-repo"
+        CFLINUXFS_RELEASE_PATH="release-repo"
         GOLANG_RELEASE_PATH="golang-release"
         GOLANG_RELEASE_ABS="$GITHUB_WORKSPACE/$GOLANG_RELEASE_PATH"
         GIT_USER_NAME="${{ inputs.git_user_name }}"
@@ -98,7 +98,7 @@ runs:
         PRIVATE_YML="${{ inputs.private_yml }}"
         RELEASE_DIR="${{ inputs.release_dir }}"
 
-        cd "$CFLINUXFS5_RELEASE_PATH/$RELEASE_DIR"
+        cd "$CFLINUXFS_RELEASE_PATH/$RELEASE_DIR"
 
         git config user.name "$GIT_USER_NAME"
         git config user.email "$GIT_USER_EMAIL"

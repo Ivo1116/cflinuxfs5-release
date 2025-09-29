@@ -3,7 +3,7 @@ description: 'Deletes CF and rootfs smoke test deployments from a BBL environmen
 
 inputs:
   stack:
-    description: 'Stack name (e.g. cflinuxfs5)'
+    description: 'Stack name (e.g. {your-cflinuxfs-version})'
     required: true
   bbl_state_repo:
     description: 'Repo holding bbl state (owner/repo)'

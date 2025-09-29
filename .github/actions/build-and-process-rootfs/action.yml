@@ -38,12 +38,12 @@ runs:
         ref: master
         path: buildpacks-ci
 
-    - name: Checkout cflinuxfs5
+    - name: Checkout cflinuxfs repo
       uses: actions/checkout@v4
       with:
         repository: ${{ inputs.cflinuxfs_repo }}
         ref: main
-        path: cflinuxfs5
+        path: ${{ env.STACK }}
         ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
 
     - name: Make rootfs
@@ -60,7 +60,7 @@ runs:
         version: ${{ inputs.version }}
         previous_version: ${{ inputs.previous_version }}
 
-    - name: Build cflinuxfs5 BOSH release
+    - name: Build cflinuxfs BOSH release
       uses: ./.github/actions/create-bosh-release
       with:
         stack: ${{ inputs.stack }}

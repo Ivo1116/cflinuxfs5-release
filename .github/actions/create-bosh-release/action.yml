@@ -3,7 +3,7 @@ description: 'Create a BOSH release tarball (final or dev) with vendored golang-
 
 inputs:
   stack:
-    description: 'Stack name (e.g., cflinuxfs5)'
+    description: 'Stack name (e.g., {your-cflinuxfs-version})'
     required: true
   bucket_name:
     description: 'S3 bucket name'
@@ -12,7 +12,7 @@ inputs:
     description: 'Version number (e.g., 1.0.0 or 1.0.0-rc.1)'
     required: true
   release_name:
-    description: 'BOSH release name (e.g., cflinuxfs5)'
+    description: 'BOSH release name (e.g., {your-cflinuxfs-version})'
     required: true
   release_repo:
     description: 'GitHub org/repo for the BOSH release'

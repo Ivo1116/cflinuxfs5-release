@@ -10,8 +10,7 @@ inputs:
     required: true
   env_name:
     description: 'Environment name'
-    required: false
-    default: 'cflinuxfs5-test'
+    required: true
   gcp_project_id:
     description: 'GCP Project ID'
     required: true

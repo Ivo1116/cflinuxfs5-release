@@ -1,5 +1,5 @@
 name: 'Run CATs'
-description: 'Run Cloud Foundry Acceptance Tests (CATS) on cflinuxfs5 with minimal Go buildpack'
+description: 'Run Cloud Foundry Acceptance Tests (CATS) on ${ env.STACK }'
 
 inputs:
   bbl_state_repo:

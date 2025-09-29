@@ -3,7 +3,7 @@ description: 'Produce final receipt file from RC receipt'
 
 inputs:
   stack:
-    description: 'Stack name (e.g. cflinuxfs5)'
+    description: 'Stack name (e.g. {your-cflinuxfs-version})'
     required: true
   rc_version:
     description: 'RC version to finalize'
@@ -28,7 +28,6 @@ runs:
         mkdir -p "$out_dir"
         cp "$in" "$out"
         
-        # Update version references in receipt
         sed -i "s/${{ inputs.rc_version }}/${{ inputs.final_version }}/g" "$out" || true
         
         echo "Updated receipt from ${{ inputs.rc_version }} to ${{ inputs.final_version }}"

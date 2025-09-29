@@ -90,8 +90,8 @@ runs:
         repo_dir: rootfs
         receipt_path: receipt-archive/receipt.${{ inputs.stack }}.x86_64-${{ inputs.final_version }}
         tag: ${{ inputs.final_version }}
-        git_user_name: cflinuxfs5-bot
-        git_user_email: cflinuxfs5-bot@test.com
+        git_user_name: ${{ env.STACK }}-bot
+        git_user_email: ${{ env.STACK }}-bot@test.com
 
     - name: Upload final stack to S3
       uses: ./.github/actions/upload-s3

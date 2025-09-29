@@ -1,15 +1,13 @@
-name: 'Setup Cloudflare DNS for CF Environment'
+name: 'Setup Cloudflare DNS for CF Environment (currently not working)'
 description: 'Extract IPs from BOSH vars YAML files in BBL state repo, clean up duplicate DNS records in Cloudflare, and create/update DNS records'
 
 inputs:
   env_name:
     description: 'Environment name (used for vars file paths in BBL state repo)'
     required: true
-    default: 'cflinuxfs5'
   bbl_state_repo:
     description: 'BBL state repository (cloned for vars files)'
     required: true
-    default: 'ivo1116/buildpacks-envs'  # Default from main workflow
   bbl_state_branch:
     description: 'BBL state branch'
     required: true
@@ -30,9 +28,7 @@ runs:
     - name: Install dependencies (yq and jq)
       shell: bash
       run: |
-        # Install yq
         sudo snap install yq
-        # Install jq (usually available, but ensure)
         sudo apt-get update
         sudo apt-get install -y jq
 
@@ -49,11 +45,10 @@ runs:
       id: extract-ips
       shell: bash
       run: |
-        # Vars files are in cloned BBL state repo at bbl-state/{env_name}/vars/
         ENV_NAME="${{ inputs.env_name }}"
         JUMBOX_VARS="bbl-state/${ENV_NAME}/vars/jumpbox-vars-file.yml"
         DIRECTOR_VARS="bbl-state/${ENV_NAME}/vars/director-vars-file.yml"
-        SYS_SUBDOMAIN="sys"  # Fixed as per standard CF
+        SYS_SUBDOMAIN="sys"  
 
         if [[ ! -f "$JUMBOX_VARS" || ! -f "$DIRECTOR_VARS" ]]; then
           echo "Error: YAML files not found at $JUMBOX_VARS and $DIRECTOR_VARS"
@@ -66,18 +61,15 @@ runs:
         TCP_ROUTER_LB_IP=$(yq eval '.tcp_router_lb_ip' "$JUMBOX_VARS")
         WS_LB_IP=$(yq eval '.ws_lb_ip' "$JUMBOX_VARS")
 
-        # Validate consistency with director vars (optional)
         if [[ "$(yq eval '.router_lb_ip' "$DIRECTOR_VARS")" != "$ROUTER_LB_IP" ]]; then
           echo "Warning: router_lb_ip mismatch between files."
         fi
 
-        # Output IPs as step outputs and env for next steps
         echo "router_lb_ip=$ROUTER_LB_IP" >> $GITHUB_OUTPUT
         echo "ssh_proxy_lb_ip=$SSH_PROXY_LB_IP" >> $GITHUB_OUTPUT
         echo "tcp_router_lb_ip=$TCP_ROUTER_LB_IP" >> $GITHUB_OUTPUT
         echo "ws_lb_ip=$WS_LB_IP" >> $GITHUB_OUTPUT
 
-        # Export as env for the next step
         echo "ROUTER_LB_IP=$ROUTER_LB_IP" >> $GITHUB_ENV
         echo "SSH_PROXY_LB_IP=$SSH_PROXY_LB_IP" >> $GITHUB_ENV
         echo "TCP_ROUTER_LB_IP=$TCP_ROUTER_LB_IP" >> $GITHUB_ENV
@@ -104,28 +96,24 @@ runs:
       id: setup-dns
       shell: bash
       run: |
-        # Function to upsert (create or update) a DNS record (handles duplicates and existing records robustly)
         upsert_dns_record() {
           local name="$1"
           local ip="$2"
           local record_type="A"
-          local proxied=false  # DNS only
+          local proxied=false  
 
           echo "Processing DNS record: $name -> $ip"
 
-          # Step 1: Check for existing records with this name and type (handles multiple if any)
           local existing_records
           existing_records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json")
 
-          # Collect all IDs to delete extras (cleanup duplicates)
           local ids_to_delete
           mapfile -t ids_to_delete < <(echo "$existing_records" | jq -r '.result[]? | select(.id != null) | .id // empty' | grep -v '^$')
           local num_existing=${#ids_to_delete[@]}
 
           if [[ $num_existing -gt 0 ]]; then
-            # Delete all existing to avoid conflicts, then recreate (or keep one for update)
             for id in "${ids_to_delete[@]}"; do
               if [[ -n "$id" && "$id" != "null" ]]; then
                 echo "Deleting duplicate existing record ID: $id for $name"
@@ -142,12 +130,11 @@ runs:
               fi
             done
             echo "Cleaned up $num_existing existing records for $name."
-            sleep 2  # Delay for propagation
+            sleep 2  
           else
             echo "No existing DNS records found for $name."
           fi
 
-          # Step 2: Generate JSON payload using jq
           local json_payload
           json_payload=$(jq -n \
             --arg type "$record_type" \
@@ -158,7 +145,6 @@ runs:
             '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')
           echo "Generated JSON payload for $name: $json_payload"
 
-          # Step 3: Try to create the record
           local response
           response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -173,7 +159,6 @@ runs:
             error_msg=$(echo "$response" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null || echo "Invalid response")
             if [[ "$error_msg" == "An identical record already exists." ]]; then
               echo "Identical record exists for $name; attempting update..."
-              # Fetch the existing ID and update (for cases where create fails but record exists)
               local existing_after_create
               existing_after_create=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$record_type&name=$name" \
                 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -205,11 +190,10 @@ runs:
           fi
         }
 
-        # Records to configure
         local_records=(
-          "* $ROUTER_LB_IP"  # Wildcard app domain (*.sisle.org)
-          "$DOMAIN $ROUTER_LB_IP"  # Apex domain (sisle.org)
-          "*.$SYS_SUBDOMAIN.$DOMAIN $ROUTER_LB_IP"  # Wildcard system domain (*.sys.sisle.org)
+          "* $ROUTER_LB_IP"  
+          "$DOMAIN $ROUTER_LB_IP"  
+          "*.$SYS_SUBDOMAIN.$DOMAIN $ROUTER_LB_IP"  
           "doppler.$SYS_SUBDOMAIN.$DOMAIN $WS_LB_IP"
           "loggregator.$SYS_SUBDOMAIN.$DOMAIN $WS_LB_IP"
           "ssh.$SYS_SUBDOMAIN.$DOMAIN $SSH_PROXY_LB_IP"
@@ -223,7 +207,7 @@ runs:
             echo "Upsert failed for $name."
             all_success=false
           fi
-          echo "---"  # Separator for logs
+          echo "---"  
         done
 
         if [[ $all_success == true ]]; then

@@ -3,7 +3,7 @@ description: 'Import a tarball as an image and push version and latest tags'
 
 inputs:
   image:
-    description: 'Full image name (e.g. cloudfoundry/cflinuxfs5)'
+    description: 'Full image name (e.g. cloudfoundry/{your-cflinuxfs-version})'
     required: true
   version:
     description: 'Version tag to push'

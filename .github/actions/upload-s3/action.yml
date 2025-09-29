@@ -30,6 +30,7 @@ runs:
       run: |
         set -euo pipefail
 
+        STACK="${{ env.STACK }}"
         VERSION="${{ inputs.version }}"
         UPLOAD_TYPE="${{ inputs.upload_type }}"
         BUCKET="${{ inputs.bucket_name }}"
@@ -37,7 +38,7 @@ runs:
 
         case "$UPLOAD_TYPE" in
           "stack")
-            STACK_FILE="rootfs-artifacts/cflinuxfs5-${VERSION}.tar.gz"
+            STACK_FILE="rootfs-artifacts/${STACK}-${VERSION}.tar.gz"
             if [[ ! -f "$STACK_FILE" ]]; then
               echo "ERROR: Stack file not found: $STACK_FILE"
               ls -la rootfs-artifacts/ || echo "No rootfs-artifacts directory"
@@ -52,7 +53,7 @@ runs:
             ;;
 
           "receipt")
-            RECEIPT_FILE="receipt-artifacts/receipt.cflinuxfs5.x86_64-${VERSION}"
+            RECEIPT_FILE="receipt-artifacts/receipt.${STACK}.x86_64-${VERSION}"
             if [[ ! -f "$RECEIPT_FILE" ]]; then
               echo "ERROR: Receipt file not found: $RECEIPT_FILE"
               ls -la receipt-artifacts/ || echo "No receipt-artifacts directory"
@@ -67,7 +68,7 @@ runs:
             ;;
 
           "release")
-            RELEASE_FILE="${FILE_INPUT:-rootfs-artifacts/cflinuxfs5-release-${VERSION}.tgz}"
+            RELEASE_FILE="${FILE_INPUT:-rootfs-artifacts/${STACK}-release-${VERSION}.tgz}"
             if [[ ! -f "$RELEASE_FILE" ]]; then
               echo "ERROR: Release file not found: $RELEASE_FILE"
               ls -la rootfs-artifacts/ || echo "No rootfs-artifacts directory"
@@ -92,6 +93,7 @@ runs:
       run: |
         set -euo pipefail
         
+        STACK="${{ env.STACK }}"
         VERSION="${{ inputs.version }}"
         UPLOAD_TYPE="${{ inputs.upload_type }}"
         BUCKET="${{ inputs.bucket_name }}"
@@ -100,16 +102,16 @@ runs:
         case "$UPLOAD_TYPE" in
           "stack")
             echo "Verifying stack upload..."
-            aws s3 ls "s3://${BUCKET}/rootfs/cflinuxfs5-${VERSION}.tar.gz" || \
+            aws s3 ls "s3://${BUCKET}/rootfs/${STACK}-${VERSION}.tar.gz" || \
               (echo "ERROR: Stack file not found in S3" && exit 1)
             ;;
           "receipt")
             echo "Verifying receipt upload..."
-            aws s3 ls "s3://${BUCKET}/rootfs/receipt.cflinuxfs5.x86_64-${VERSION}" || \
+            aws s3 ls "s3://${BUCKET}/rootfs/receipt.${STACK}.x86_64-${VERSION}" || \
               (echo "ERROR: Receipt file not found in S3" && exit 1)
             ;;
           "release")
-            RELEASE_FILE_NAME="$(basename ${FILE_INPUT:-cflinuxfs5-release-${VERSION}.tgz})"
+            RELEASE_FILE_NAME="$(basename ${FILE_INPUT:-${STACK}-release-${VERSION}.tgz})"
             echo "Verifying release upload..."
             aws s3 ls "s3://${BUCKET}/rootfs/${RELEASE_FILE_NAME}" || \
               (echo "ERROR: Release file not found in S3" && exit 1)
