@@ -44,7 +44,9 @@ runs:
             echo "**Environment Setup**: Failed"
           fi
           
-          if [[ "${{ inputs.deployment_ready }}" == "true" ]]; then
+          if [[ "${{ inputs.skip_deploy }}" == "true" ]]; then
+            echo "**CF Deployment**: Skipped"
+          elif [[ "${{ inputs.deployment_ready }}" == "true" ]]; then
             echo "**CF Deployment**: Success"
           else
             echo "**CF Deployment**: Failed"

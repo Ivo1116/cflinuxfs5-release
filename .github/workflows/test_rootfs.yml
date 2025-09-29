@@ -281,4 +281,4 @@ jobs:
           deployment_ready: ${{ needs.deploy-cf.outputs.deployment_ready }}
           cats_passed: ${{ needs.run-cats.outputs.cats_passed }}
           race_check_passed: ${{ needs.check-race-condition.outputs.race_check_passed }}
-          version: ${{ needs.deploy-cf.outputs.version }}
+          version: ${{ needs.resolve-inputs.outputs.version }}
