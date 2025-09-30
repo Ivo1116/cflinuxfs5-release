@@ -1,5 +1,5 @@
-name: 'Deploy CF with ${{ env.STACK }}'
-description: 'Deploy Cloud Foundry to a bbl environment using the ${{ env.STACK }} stack'
+name: 'Deploy CF with the new cflinux version'
+description: 'Deploy Cloud Foundry to a bbl environment using the new stack'
 
 inputs:
   env_name:
