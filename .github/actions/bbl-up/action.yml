@@ -141,3 +141,15 @@ runs:
         else
           echo "No BBL state changes to commit."
         fi
+
+    - name: Cleanup sensitive files
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        ENV_DIR="bbl-state/${{ inputs.env_name }}"
+        rm -f "$ENV_DIR/gcp-key.json" || true
+        rm -f "$ENV_DIR/lb-cert.pem" || true
+        rm -f "$ENV_DIR/lb-key.pem" || true
+        rm -f gcp-key.json || true  
+        echo "Cleaned up sensitive files in $ENV_DIR"

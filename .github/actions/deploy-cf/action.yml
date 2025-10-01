@@ -140,3 +140,14 @@ runs:
           -v system_domain=${DOMAIN}
 
         echo "success=true" >> "$GITHUB_OUTPUT"
+
+    - name: Cleanup sensitive files
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
+        rm -f "$BBL_STATE_DIR"/*key*.json || true
+        rm -f "$BBL_STATE_DIR"/*.pem || true
+        rm -f private.yml || true
+        echo "Cleaned up sensitive files in $BBL_STATE_DIR"

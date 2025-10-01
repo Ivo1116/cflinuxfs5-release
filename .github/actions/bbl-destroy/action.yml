@@ -92,20 +92,17 @@ runs:
         echo "Environment destroyed successfully"
         echo "success=true" >> $GITHUB_OUTPUT
 
-
-    - name: Cleanup GCP key
+    - name: Cleanup sensitive files
       if: always()
       shell: bash
       run: |
         set -euo pipefail
-        BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
-        KEY_FILE="$BBL_STATE_DIR/gcp-key.json"
-        if [[ -f "$KEY_FILE" ]]; then
-          rm -f "$KEY_FILE"
-          echo "GCP key file removed: $KEY_FILE"
-        else
-          echo "No GCP key file to cleanup"
-        fi
+        ENV_DIR="bbl-state/${{ inputs.env_name }}"
+        rm -f "$ENV_DIR/gcp-key.json" || true
+        rm -f "$ENV_DIR/lb-cert.pem" || true
+        rm -f "$ENV_DIR/lb-key.pem" || true
+        rm -f gcp-key.json || true  
+        echo "Cleaned up sensitive files in $ENV_DIR"
 
     - name: Commit and push BBL state
       if: always()
