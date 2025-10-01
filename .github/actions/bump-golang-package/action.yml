@@ -53,6 +53,17 @@ runs:
         ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
         path: release-repo
 
+    - name: Cache BOSH/BBL tools
+      id: cache-tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/bin/bbl
+          /usr/local/bin/bosh
+          /usr/local/bin/terraform
+        key: ${{ runner.os }}-bbl-tools-v1  
+        restore-keys: ${{ runner.os }}-bbl-tools-
+
     - name: Checkout bosh-package-golang-release
       uses: actions/checkout@v4
       with:
@@ -67,6 +78,7 @@ runs:
         git config --global user.email "${{ inputs.git_user_email }}"
 
     - name: Install BOSH CLI
+      if: steps.cache-tools.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail

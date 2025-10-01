@@ -21,50 +21,41 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-      continue-on-error: true
-
     - name: Create output directory
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p public-robots-artifacts
-        
+        mkdir -p receipt-artifacts 
+
     - name: Download previous receipt
+      if: inputs.previous_version != ''
+      uses: ./.github/actions/download-s3
+      with:
+        stack: ${{ inputs.stack }}
+        version: ${{ inputs.previous_version }}
+        bucket_name: ${{ env.BUCKET_NAME }}
+        artifact_type: receipt
+      continue-on-error: true
+
+    - name: Prepare previous receipt file
       shell: bash
       run: |
         set -euo pipefail
         
         STACK="${{ inputs.stack }}"
         PREV_VERSION="${{ inputs.previous_version }}"
+        PREVIOUS_RECEIPT_FILE="receipt-artifacts/receipt.${STACK}.x86_64-${PREV_VERSION}"
+        PREVIOUS_RECEIPT="receipt.${STACK}.x86_64.previous"
         
-        if [[ -n "$PREV_VERSION" && "$PREV_VERSION" != "" ]]; then
-          echo "Attempting to download previous receipt for version: $PREV_VERSION"
-          
-          # Try S3 first
-          if aws s3 cp "s3://buildpacks.cloudfoundry.org/rootfs/receipt.${STACK}.x86_64-${PREV_VERSION}" \
-             "receipt.${STACK}.x86_64.previous" 2>/dev/null; then
-            echo "Downloaded previous receipt from S3"
-          else
-            echo "S3 download failed, trying GitHub releases..."
-            if curl -L -f -o "receipt.${STACK}.x86_64.previous" \
-              "https://github.com/cloudfoundry/${STACK}/releases/download/${PREV_VERSION}/receipt.${STACK}.x86_64-${PREV_VERSION}" 2>/dev/null; then
-              echo "Downloaded previous receipt from GitHub releases"
-            else
-              echo "Could not download previous receipt, creating empty file"
-              touch "receipt.${STACK}.x86_64.previous"
-            fi
-          fi
+        if [[ -n "$PREV_VERSION" && -f "$PREVIOUS_RECEIPT_FILE" ]]; then
+          echo "Found previous receipt for version: $PREV_VERSION"
+          cp "$PREVIOUS_RECEIPT_FILE" "$PREVIOUS_RECEIPT"
         else
-          echo "No previous version specified, creating empty previous receipt"
-          touch "receipt.${STACK}.x86_64.previous"
+          echo "No previous receipt available (version: '$PREV_VERSION', file exists: $([[ -f "$PREVIOUS_RECEIPT_FILE" ]] && echo 'yes' || echo 'no')) - creating empty file"
+          touch "$PREVIOUS_RECEIPT"
         fi
-        
+
     - name: Generate diff
       id: diff
       shell: bash
@@ -87,6 +78,7 @@ runs:
         echo "Current: $CURRENT_RECEIPT"
         
         DIFF_FILE="public-robots-artifacts/receipt-diff-${VERSION}.txt"
+        SUMMARY_FILE="public-robots-artifacts/receipt-summary-${VERSION}.txt"
         
         if command -v git >/dev/null 2>&1; then
           git --no-pager diff --no-index "$PREVIOUS_RECEIPT" "$CURRENT_RECEIPT" > "$DIFF_FILE" || true
@@ -94,7 +86,6 @@ runs:
           diff -u "$PREVIOUS_RECEIPT" "$CURRENT_RECEIPT" > "$DIFF_FILE" || true
         fi
         
-        SUMMARY_FILE="public-robots-artifacts/receipt-summary-${VERSION}.txt"
         {
           echo "Receipt Diff Summary"
           echo "==================="
@@ -102,11 +93,15 @@ runs:
           echo "Current Version: $VERSION"
           echo "Generated: $(date -u)"
           echo ""
-          echo "Diff Lines: $(wc -l < "$DIFF_FILE")"
+          echo "Diff Lines: $(wc -l < "$DIFF_FILE" 2>/dev/null || echo '0')"
           echo ""
-          echo "Diff:"
-          cat "$DIFF_FILE"
+          if [[ -s "$DIFF_FILE" ]]; then
+            echo "Diff:"
+            cat "$DIFF_FILE"
+          else
+            echo "No changes detected (or no previous version available)."
+          fi
         } > "$SUMMARY_FILE"
         
-        echo "Diff generated successfully"
+        echo "Diff generated successfully (empty previous treated as no prior version)"
         echo "diff_path=public-robots-artifacts" >> $GITHUB_OUTPUT

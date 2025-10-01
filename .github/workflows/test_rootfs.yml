@@ -140,7 +140,6 @@ jobs:
           ops_file_repo: ${{ env.OPS_FILE_REPO }}
           ops_file: ${{ env.OPS_FILE }}
 
-
   run-cats:
     name: Run Cloud Foundry Acceptance Tests
     needs: [deploy-cf, resolve-inputs]

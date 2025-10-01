@@ -23,8 +23,7 @@ inputs:
     default: "7.5.6"
   go_version:
     description: 'Go version to vendor as a blob under golang-1-linux (e.g., 1.24.6)'
-    required: false
-    default: "1.24.6"
+    required: true
   golang_release_ref:
     description: 'Git ref (tag/branch/commit) of bosh-package-golang-release to vendor from'
     required: false
@@ -68,7 +67,19 @@ runs:
         ref: ${{ inputs.golang_release_ref }}
         path: bosh-package-golang-release
 
+    - name: Cache BOSH/BBL tools
+      id: cache-tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/bin/bbl
+          /usr/local/bin/bosh
+          /usr/local/bin/terraform
+        key: ${{ runner.os }}-bbl-tools-v1  
+        restore-keys: ${{ runner.os }}-bbl-tools-
+
     - name: Install bosh CLI
+      if: steps.cache-tools.outputs.cache-hit != 'true'
       shell: bash
       run: |
         VERSION="${{ inputs.bosh_cli_version }}"

@@ -24,7 +24,19 @@ runs:
         ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
         path: bbl-state
 
+    - name: Cache BOSH/BBL tools
+      id: cache-tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/bin/bbl
+          /usr/local/bin/bosh
+          /usr/local/bin/terraform
+        key: ${{ runner.os }}-bbl-tools-v1  
+        restore-keys: ${{ runner.os }}-bbl-tools-
+
     - name: Setup tools (bosh, bbl)
+      if: steps.cache-tools.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
