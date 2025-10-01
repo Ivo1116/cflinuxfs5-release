@@ -33,11 +33,18 @@ env:
   BUCKET_NAME: cflinuxfs5test
   DEFAULT_BRANCH: main
   CFLINUXFS5_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
+  BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
   BUILDPACKS_ENVS_REPO: ivo1116/buildpacks-envs
   OPS_FILE_REPO: ivo1116/test
   OPS_FILE: use-cflinuxfs5.yml
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: us-east-1
+  GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SYSTEM_DOMAIN: test.gcp.cfrt-sof.sapcloud.io
+  CFLINUXFS5_LB_CERT: ${{ secrets.CFLINUXFS5_LB_CERT }}
+  CFLINUXFS5_LB_KEY: ${{ secrets.CFLINUXFS5_LB_KEY }}
   GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPMb9xqMjZzIYWRiCJq976v5K8O0FDln4djspB
   BBL_UP_DELAY_SECONDS: 300
 
@@ -96,11 +103,7 @@ jobs:
           gcp_project_id: ${{ env.GCP_PROJECT_ID }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
-        env:
-          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
-          CFLINUXFS5_LB_CERT: ${{ secrets.CFLINUXFS5_LB_CERT }}
-          CFLINUXFS5_LB_KEY: ${{ secrets.CFLINUXFS5_LB_KEY }}
+
 
       - name: Wait after BBL up
         run: |
@@ -132,13 +135,7 @@ jobs:
           bucket_name: ${{ env.BUCKET_NAME }}
           ops_file_repo: ${{ env.OPS_FILE_REPO }}
           ops_file: ${{ env.OPS_FILE }}
-        env:
-          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          BUILDPACKS_ENVS_DEPLOY_KEY: ${{ secrets.BUILDPACKS_ENVS_DEPLOY_KEY }}
-          BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
-          CFLINUXFS5_DEPLOY_KEY: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
 
   run-cats:
     name: Run Cloud Foundry Acceptance Tests
@@ -168,10 +165,6 @@ jobs:
           env_name: ${{ env.STACK }}
           nodes: 4
           flake_attempts: 3
-        env:
-          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
-          BUILDPACKS_ENVS_DEPLOY_KEY: ${{ secrets.BUILDPACKS_ENVS_DEPLOY_KEY }}
 
   check-race-condition:
     name: Check for Race Conditions
@@ -215,9 +208,6 @@ jobs:
           stack: ${{ env.STACK }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
-        env:
-          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   destroy-test-environment:
     name: Destroy Test Environment
@@ -237,9 +227,6 @@ jobs:
           gcp_project_id: ${{ env.GCP_PROJECT_ID }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
-        env:
-          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   trigger-release-workflow:
     name: Trigger Release Workflow

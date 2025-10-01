@@ -22,7 +22,7 @@ env:
   CFLINUXFS5_RELEASE_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  PUBLIC_ROBOTS_TOKEN: ${{ secrets.PUBLIC_ROBOTS_TOKEN }}
+  AWS_REGION: us-east-1
   BUILDPACKS_CI_REPO: ivo1116/buildpacks-ci
   GOLANG_RELEASE_REPO: cloudfoundry/bosh-package-golang-release
   CVE_UBUNTU_VERSION: Ubuntu 24.04
@@ -59,8 +59,6 @@ jobs:
           buildpacks_ci_repo: ${{ env.BUILDPACKS_CI_REPO }}
           cves_repo_path: new-cves
           rootfs-repo: ${{ env.ROOTFS_REPO }}
-        env:
-          CFLINUXFS5_DEPLOY_KEY: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
 
   bump-golang-package:
     name: Bump Golang Package
@@ -89,8 +87,6 @@ jobs:
           cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
           golang_release_repo: ${{ env.GOLANG_RELEASE_REPO }}
           golang_release_ref: ${{ env.DEFAULT_BRANCH }}
-        env:
-          CFLINUXFS5_DEPLOY_KEY: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
 
   determine-build-needed:
     name: Determine if Build is Needed
@@ -166,11 +162,6 @@ jobs:
           release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_repo: ${{ env.ROOTFS_REPO }}
           go_version: ${{ env.GOLANG_VERSION }}
-        env:
-          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          CFLINUXFS5_DEPLOY_KEY: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
-          PUBLIC_ROBOTS_TOKEN: ${{ env.PUBLIC_ROBOTS_TOKEN }}
 
       - name: Dispatch Test Workflow
         if: success()
