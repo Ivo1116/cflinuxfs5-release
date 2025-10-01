@@ -42,6 +42,8 @@ env:
   AWS_REGION: us-east-1
   GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  GCP_ZONE: us-central1-a
   SYSTEM_DOMAIN: test.gcp.cfrt-sof.sapcloud.io
   CFLINUXFS5_LB_CERT: ${{ secrets.CFLINUXFS5_LB_CERT }}
   CFLINUXFS5_LB_KEY: ${{ secrets.CFLINUXFS5_LB_KEY }}
@@ -101,6 +103,8 @@ jobs:
           env_name: ${{ env.STACK }}
           lb_domain: ${{ env.SYSTEM_DOMAIN }}
           gcp_project_id: ${{ env.GCP_PROJECT_ID }}
+          gcp_zone: ${{ env.GCP_ZONE }}
+          gcp_region: ${{ env.GCP_REGION }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
 
@@ -227,6 +231,8 @@ jobs:
           gcp_project_id: ${{ env.GCP_PROJECT_ID }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
+          gcp_zone: ${{ env.GCP_ZONE }}
+          gcp_region: ${{ env.GCP_REGION }}
 
   trigger-release-workflow:
     name: Trigger Release Workflow

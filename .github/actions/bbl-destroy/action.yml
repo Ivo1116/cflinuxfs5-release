@@ -17,12 +17,10 @@ inputs:
     required: true
   gcp_zone:
     description: 'GCP Zone'
-    required: false
-    default: 'us-central1-a'
+    required: true
   gcp_region:
     description: 'GCP Region'
-    required: false
-    default: 'us-central1'
+    required: true
 
 outputs:
   success:
