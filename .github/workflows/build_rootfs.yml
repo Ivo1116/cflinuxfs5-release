@@ -67,6 +67,16 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Debug OIDC Context
+        run: |
+          echo "Full Repository: ${{ github.repository }} (should be ivo1116/cflinuxfs5-release)"
+          echo "Event Name: ${{ github.event_name }} (e.g., repository_dispatch for cve-update)"
+          echo "Ref: ${{ github.ref }} (e.g., refs/heads/main)"
+          echo "Ref Type: ${{ github.ref_type }} (e.g., branch)"
+          echo "Ref Name: ${{ github.ref_name }} (e.g., main)"
+          echo "Expected sub prefix: repo:ivo1116/cflinuxfs5-release:*"
+          echo "Full expected sub example: repo:${{ github.repository }}:${{ github.ref_type }}/${{ github.ref_name }}"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
