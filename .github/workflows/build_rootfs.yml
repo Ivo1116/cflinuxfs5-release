@@ -72,6 +72,8 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
+        env:
+          ACTIONS_STEP_DEBUG: true
         
       - name: Bump Golang Package
         id: golang-bump
