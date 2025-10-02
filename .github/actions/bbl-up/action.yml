@@ -30,6 +30,15 @@ inputs:
     description: 'Branch for BBL state'
     required: false
     default: 'main'
+  lb_cert:
+    description: 'Load balancer certificate'
+    required: true
+  lb_key:
+    description: 'Load balancer private key'
+    required: true
+  bbl_state_deploy_key:
+    description: 'SSH deploy key for BBL state repo'
+    required: true
 
 outputs:
   success:
@@ -45,7 +54,7 @@ runs:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
         path: bbl-state
-        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.bbl_state_deploy_key }}
 
     - name: Cache BOSH/BBL tools
       id: cache-tools
@@ -87,23 +96,24 @@ runs:
         set -euo pipefail
         export PATH="/usr/local/bin:$PATH"
 
+        TEMP_DIR=$(mktemp -d)
+        chmod 700 "$TEMP_DIR"
+        trap "rm -rf '$TEMP_DIR'" EXIT ERR INT TERM
+
         mkdir -p bbl-state/${{ inputs.env_name }}
         cd bbl-state/${{ inputs.env_name }}
 
-        printf "%s" "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-key.json
+        echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
+        echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
+        chmod 600 "$TEMP_DIR"/*.pem
 
-        export BBL_GCP_SERVICE_ACCOUNT_KEY="$(pwd)/gcp-key.json"
+        export BBL_LB_CERT="$TEMP_DIR/lb-cert.pem"
+        export BBL_LB_KEY="$TEMP_DIR/lb-key.pem"
+        
         export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
         export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
         export BBL_GCP_REGION="${{ inputs.gcp_region }}"
         export BBL_IAAS=gcp
-
-        if [[ -n "${CFLINUXFS5_LB_CERT:-}" && -n "${CFLINUXFS5_LB_KEY:-}" ]]; then
-          printf "%s" "${CFLINUXFS5_LB_CERT}" > lb-cert.pem
-          printf "%s" "${CFLINUXFS5_LB_KEY}" > lb-key.pem
-          export BBL_LB_CERT="$(pwd)/lb-cert.pem"
-          export BBL_LB_KEY="$(pwd)/lb-key.pem"
-        fi
 
         if [[ -n "${{ inputs.lb_domain }}" ]]; then
           export LB_DOMAIN="${{ inputs.lb_domain }}"
@@ -124,18 +134,26 @@ runs:
         set -euo pipefail
         cd bbl-state
         git config user.name "CF Buildpacks Eng Bot"
-        git config user.email "tanzu-buildpacks.pdl@broadcom.com"
+        git config user.email "test@test.com"
         
-        echo "*/gcp-key.json" >> .gitignore
-        echo "*/service-account-key.json" >> .gitignore
-        echo "*/*-key.json" >> .gitignore
-        echo "*/*.key" >> .gitignore
-        echo "*/*.pem" >> .gitignore
-        echo "*/private_key" >> .gitignore
-        echo "*/id_rsa*" >> .gitignore
-        
+        cat >> .gitignore <<'EOF'
+        # Secrets
+        **/gcp-key.json
+        **/service-account-key.json
+        **/*-key.json
+        **/*.key
+        **/*.pem
+        **/private_key
+        **/id_rsa*
+        **/.ssh/
+        **/credentials
+        **/*secret*
+        **/*password*
+        EOF
+
         if [[ -n "$(git status --porcelain)" ]]; then
-          git add -A
+          git add -A .gitignore
+          git add -A ${{ inputs.env_name }}
           git commit -m "Update BBL state for ${{ inputs.env_name }}"
           git push origin ${{ inputs.bbl_state_branch }}
         else
@@ -146,10 +164,15 @@ runs:
       if: always()
       shell: bash
       run: |
-        set -euo pipefail
-        ENV_DIR="bbl-state/${{ inputs.env_name }}"
-        rm -f "$ENV_DIR/gcp-key.json" || true
-        rm -f "$ENV_DIR/lb-cert.pem" || true
-        rm -f "$ENV_DIR/lb-key.pem" || true
-        rm -f gcp-key.json || true  
-        echo "Cleaned up sensitive files in $ENV_DIR"
+        set +e
+        
+        find bbl-state -type f \( \
+          -name "*.pem" -o \
+          -name "*.key" -o \
+          -name "*-key.json" -o \
+          -name "private_key" -o \
+          -name "id_rsa*" -o \
+          -name "credentials" \
+        \) -exec shred -vfz -n 3 {} \; 2>/dev/null || true
+        
+        echo "Cleanup completed"

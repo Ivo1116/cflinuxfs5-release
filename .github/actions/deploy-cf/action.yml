@@ -18,6 +18,9 @@ inputs:
     description: 'Branch of the bbl state repo'
     required: false
     default: main
+  bbl_state_deploy_key:
+    description: 'SSH deploy key for BBL state repo'
+    required: true
   ops_file_repo:
     description: 'Git repo conataining the ops file'
     required: true
@@ -54,19 +57,12 @@ runs:
         key: ${{ runner.os }}-bbl-tools-v1  
         restore-keys: ${{ runner.os }}-bbl-tools-
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
     - name: Checkout bbl state repo
       uses: actions/checkout@v4
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
-        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.bbl_state_deploy_key }}
         path: bbl-state
 
     - name: Checkout cf-deployment

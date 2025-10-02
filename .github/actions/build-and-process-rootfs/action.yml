@@ -23,6 +23,12 @@ inputs:
   go_version:
     description: 'Go version'
     required: true
+  cflinuxfs_deploy_key:
+    description: 'SSH deploy key for cflinuxfs repo'
+    required: true
+  release_deploy_key:
+    description: 'SSH deploy key for release repo'
+    required: true
 
 runs:
   using: 'composite'
@@ -43,7 +49,7 @@ runs:
         repository: ${{ inputs.cflinuxfs_repo }}
         ref: main
         path: ${{ env.STACK }}
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.cflinuxfs_deploy_key }}
 
     - name: Make rootfs
       uses: ./.github/actions/make-rootfs
@@ -67,6 +73,7 @@ runs:
         bucket_name: ${{ inputs.bucket_name }}
         release_name: ${{ inputs.stack }}
         release_repo: ${{ inputs.release_repo }}
+        release_deploy_key::  ${{ inputs.release_deploy_key }}
         go_version: ${{ inputs.go_version }}
         final: false
 

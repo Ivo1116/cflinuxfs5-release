@@ -5,8 +5,11 @@ inputs:
   stack:
     description: 'Stack name (e.g., {your-cflinuxfs-version})'
     required: true
-  rootfs-repo:
+  rootfs_repo:
     description: 'Repo containing the stack source code'
+    required: true
+  cflinuxfs_deploy_key:
+    description: 'Deploy key for the repo'
     required: true
   ubuntu_version:
     description: 'Ubuntu version description'
@@ -18,8 +21,7 @@ inputs:
     default: 'ubuntu24.04'
   buildpacks_ci_repo:
     description: 'Buildpacks CI repository (owner/repo)'
-    required: false
-    default: 'ivo1116/buildpacks-ci'
+    required: true
   cves_repo_path:
     description: 'Path to CVEs repository'
     required: false
@@ -50,7 +52,7 @@ runs:
         repository: ${{ inputs.rootfs-repo }}
         ref: main
         path: rootfs
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.cflinuxfs_deploy_key }}
 
     - name: Checkout CVEs repository
       uses: actions/checkout@v4

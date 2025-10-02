@@ -17,6 +17,9 @@ inputs:
   release_repo:
     description: 'GitHub org/repo for the BOSH release'
     required: true
+  release_deploy_key:
+    description: 'SSH deploy key for release repo'
+    required: true
   bosh_cli_version:
     description: 'Version of bosh-cli to install'
     required: false
@@ -58,7 +61,7 @@ runs:
         repository: ${{ inputs.release_repo }}
         ref: main
         path: ${{ inputs.release_dir }}
-        ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.release_deploy_key }}
 
     - name: Checkout bosh-package-golang-release
       uses: actions/checkout@v4

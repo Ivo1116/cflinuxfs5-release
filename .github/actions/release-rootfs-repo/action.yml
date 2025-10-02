@@ -20,6 +20,9 @@ inputs:
   default_branch:
     description: 'Default branch name'
     required: true
+  cflinuxfs_deploy_key:
+    description: 'SSH deploy key for rootfs repo'
+    required: true
 
 runs:
   using: 'composite'
@@ -27,20 +30,13 @@ runs:
     - name: Checkout self
       uses: actions/checkout@v4
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
     - name: Checkout rootfs repo
       uses: actions/checkout@v4
       with:
         repository: ${{ inputs.rootfs_repo }}
         ref: ${{ inputs.default_branch }}
         path: rootfs
-        ssh-key: ${{ env.CFLINUXFS5_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.cflinuxfs_deploy_key }}
         persist-credentials: true
 
     - name: Download RC stack from S3

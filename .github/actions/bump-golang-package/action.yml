@@ -25,6 +25,9 @@ inputs:
   cflinuxfs_release_repo:
     description: 'GitHub repo (owner/repo) for the BOSH release'
     required: true
+  release_deploy_key:
+    description: 'Deploy key for the BOSH release repo'
+    required: true
   cflinuxfs_release_ref:
     description: 'Git ref for the BOSH release'
     required: false
@@ -50,7 +53,7 @@ runs:
       with:
         repository: ${{ inputs.cflinuxfs_release_repo }}
         ref: ${{ inputs.cflinuxfs_release_ref }}
-        ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.release_deploy_key }}
         path: release-repo
 
     - name: Cache BOSH/BBL tools

@@ -32,28 +32,22 @@ inputs:
   github_token:
     description: 'Release token'
     required: true
-
+  release_deploy_key:
+    description: 'SSH deploy key for release repo'
+    required: true
 
 runs:
   using: 'composite'
   steps:
     - name: Checkout self
       uses: actions/checkout@v4
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
     - name: Checkout release repo
       uses: actions/checkout@v4
       with:
         repository: ${{ inputs.owner }}/${{ inputs.release_repo }}
         ref: ${{ inputs.default_branch }}
         path: release
-        ssh-key: ${{ env.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.release_deploy_key }}
         persist-credentials: true
 
     - name: Download final stack from S3

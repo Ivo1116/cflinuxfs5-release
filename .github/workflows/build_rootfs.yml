@@ -18,10 +18,6 @@ env:
   RELEASE_REPO: ivo1116/cflinuxfs5-release
   BUCKET_NAME: cflinuxfs5test
   DEFAULT_BRANCH: main
-  CFLINUXFS5_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
-  CFLINUXFS5_RELEASE_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: us-east-1
   BUILDPACKS_CI_REPO: ivo1116/buildpacks-ci
   GOLANG_RELEASE_REPO: cloudfoundry/bosh-package-golang-release
@@ -33,6 +29,7 @@ env:
 permissions:
   contents: write
   actions: write
+  id-token: write
 
 defaults:
   run:
@@ -58,7 +55,8 @@ jobs:
           ubuntu_codename: ${{ env.CVE_UBUNTU_CODENAME }}
           buildpacks_ci_repo: ${{ env.BUILDPACKS_CI_REPO }}
           cves_repo_path: new-cves
-          rootfs-repo: ${{ env.ROOTFS_REPO }}
+          rootfs_repo: ${{ env.ROOTFS_REPO }}
+          cflinuxfs_deploy_key: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
 
   bump-golang-package:
     name: Bump Golang Package
@@ -68,6 +66,12 @@ jobs:
     steps:
       - name: Checkout self
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
         
       - name: Bump Golang Package
         id: golang-bump
@@ -81,12 +85,11 @@ jobs:
               provider: s3
               options:
                 bucket_name: ${{ env.BUCKET_NAME }}
-                access_key_id: ${{ env.AWS_ACCESS_KEY_ID }}
-                secret_access_key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           cflinuxfs_release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
           golang_release_repo: ${{ env.GOLANG_RELEASE_REPO }}
           golang_release_ref: ${{ env.DEFAULT_BRANCH }}
+          release_deploy_key: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 
   determine-build-needed:
     name: Determine if Build is Needed
@@ -152,6 +155,12 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Build rootfs and process artifacts
         uses: ./.github/actions/build-and-process-rootfs
         with:
@@ -162,6 +171,8 @@ jobs:
           release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_repo: ${{ env.ROOTFS_REPO }}
           go_version: ${{ env.GOLANG_VERSION }}
+          cflinuxfs_deploy_key: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
+          release_deploy_key: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 
       - name: Dispatch Test Workflow
         if: success()

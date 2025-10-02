@@ -32,27 +32,21 @@ env:
   RELEASE_REPO: ivo1116/cflinuxfs5-release
   BUCKET_NAME: cflinuxfs5test
   DEFAULT_BRANCH: main
-  CFLINUXFS5_DEPLOY_KEY: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
-  BBL_STATE_DEPLOY_KEY: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
   BUILDPACKS_ENVS_REPO: ivo1116/buildpacks-envs
   OPS_FILE_REPO: ivo1116/test
   OPS_FILE: use-cflinuxfs5.yml
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: us-east-1
-  GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GCP_REGION: us-central1
   GCP_ZONE: us-central1-a
   SYSTEM_DOMAIN: test.gcp.cfrt-sof.sapcloud.io
-  CFLINUXFS5_LB_CERT: ${{ secrets.CFLINUXFS5_LB_CERT }}
-  CFLINUXFS5_LB_KEY: ${{ secrets.CFLINUXFS5_LB_KEY }}
   GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPMb9xqMjZzIYWRiCJq976v5K8O0FDln4djspB
   BBL_UP_DELAY_SECONDS: 300
 
 permissions:
   contents: write
   actions: write
+  id-token: write
 
 defaults:
   run:
@@ -94,6 +88,12 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
       - name: Setup test environment
         id: bbl-up
         uses: ./.github/actions/bbl-up
@@ -102,11 +102,14 @@ jobs:
           version: ${{ needs.resolve-inputs.outputs.version }}
           env_name: ${{ env.STACK }}
           lb_domain: ${{ env.SYSTEM_DOMAIN }}
-          gcp_project_id: ${{ env.GCP_PROJECT_ID }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_zone: ${{ env.GCP_ZONE }}
           gcp_region: ${{ env.GCP_REGION }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
+          lb_cert: ${{ secrets.CFLINUXFS5_LB_CERT }}
+          lb_key: ${{ secrets.CFLINUXFS5_LB_KEY }}
+          bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
 
       - name: Wait after BBL up
@@ -126,6 +129,18 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Deploy CF
         id: deploy
         uses: ./.github/actions/deploy-cf
@@ -139,6 +154,7 @@ jobs:
           bucket_name: ${{ env.BUCKET_NAME }}
           ops_file_repo: ${{ env.OPS_FILE_REPO }}
           ops_file: ${{ env.OPS_FILE }}
+          bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   run-cats:
     name: Run Cloud Foundry Acceptance Tests
@@ -157,6 +173,12 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
       - name: Run CATs
         id: cats
         uses: ./.github/actions/run-cats
@@ -168,6 +190,7 @@ jobs:
           env_name: ${{ env.STACK }}
           nodes: 4
           flake_attempts: 3
+          bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   check-race-condition:
     name: Check for Race Conditions
@@ -191,8 +214,6 @@ jobs:
           stack: ${{ env.STACK }}
           owner: ${{ github.repository_owner }}
           current_version: ${{ needs.resolve-inputs.outputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup-deployments:
     name: Cleanup CF Deployments
@@ -205,12 +226,19 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
       - name: Cleanup deployments
         uses: ./.github/actions/cleanup-deployments
         with:
           stack: ${{ env.STACK }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
+          bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   destroy-test-environment:
     name: Destroy Test Environment
@@ -223,15 +251,22 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
       - name: Destroy test environment
         uses: ./.github/actions/bbl-destroy
         with:
           env_name: ${{ env.STACK }}
-          gcp_project_id: ${{ env.GCP_PROJECT_ID }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
           gcp_zone: ${{ env.GCP_ZONE }}
           gcp_region: ${{ env.GCP_REGION }}
+          bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   trigger-release-workflow:
     name: Trigger Release Workflow
