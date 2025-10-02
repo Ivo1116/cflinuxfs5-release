@@ -95,13 +95,13 @@ runs:
       shell: bash
       run: |
         mkdir -p ${{ inputs.release_dir }}/config
+
         cat > ${{ inputs.release_dir }}/config/private.yml <<EOF
         blobstore:
           provider: s3
           options:
             bucket_name: ${{ inputs.bucket_name }}
-            access_key_id: ${{ env.AWS_ACCESS_KEY_ID }}
-            secret_access_key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+            region: ${{ env.AWS_REGION }}
         EOF
 
     - name: Build BOSH release
