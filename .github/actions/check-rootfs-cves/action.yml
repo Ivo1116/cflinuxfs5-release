@@ -49,7 +49,7 @@ runs:
     - name: Checkout cflinuxfs repo
       uses: actions/checkout@v4
       with:
-        repository: ${{ inputs.rootfs-repo }}
+        repository: ${{ inputs.rootfs_repo }}
         ref: main
         path: rootfs
         ssh-key: ${{ inputs.cflinuxfs_deploy_key }}
