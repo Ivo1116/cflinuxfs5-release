@@ -118,20 +118,40 @@ runs:
             region: ${{ env.AWS_REGION }}
         EOF
 
-        cat config/private.yml
-
-
     - name: Build BOSH release
       id: build
       shell: bash
       run: |
         set -euo pipefail
+        
         STACK="${{ inputs.stack }}"
         VERSION="${{ inputs.version }}"
         GO_VERSION="${{ inputs.go_version }}"
         FINAL="${{ inputs.final }}"
 
         cd "${{ inputs.release_dir }}"
+
+        bosh target none || true
+        echo "BOSH target reset to local (no director)"
+
+        if [[ -f config/blobs.yml ]]; then
+          echo "Cleaning existing blobs.yml..."
+          rm -f config/blobs.yml
+        else
+          echo "No existing blobs.yml - fresh build"
+        fi
+
+        bosh remove-blob cflinuxfs5-rootfs-setup || true
+        bosh remove-blob cflinuxfs5-smoke-test || true
+        bosh remove-blob rootfs-certsplitter-cflinuxfs5 || true
+        bosh remove-blob golang-1-linux || true
+
+        if [[ -d dev_builds ]]; then
+          echo "Cleaning dev_builds directory..."
+          rm -rf dev_builds
+        else
+          echo "No dev_builds - fresh"
+        fi
 
         bosh vendor-package golang-1-linux ../bosh-package-golang-release
 
@@ -142,14 +162,15 @@ runs:
           echo "Downloading Go ${GO_VERSION} blob..."
           curl -L "https://go.dev/dl/${GO_BLOB_FILE}" -o "${GO_BLOB_DIR}/${GO_BLOB_FILE}"
           bosh add-blob "${GO_BLOB_DIR}/${GO_BLOB_FILE}" "golang-1-linux/${GO_BLOB_FILE}"
+        else
+          echo "Go blob already exists - skipping download"
         fi
 
         mkdir -p blobs/rootfs
-        bosh remove-blob rootfs/${STACK}-*.tar.gz || true
         cp ../rootfs-artifacts/${STACK}-${VERSION}.tar.gz blobs/rootfs/${STACK}-${VERSION}.tar.gz
         bosh add-blob blobs/rootfs/${STACK}-${VERSION}.tar.gz rootfs/${STACK}-${VERSION}.tar.gz
 
-        bosh sync-blobs
+        bosh sync-blobs || true
 
         mkdir -p ../rootfs-artifacts
         OUTPUT="../rootfs-artifacts/${STACK}-release-${VERSION}.tgz"
@@ -165,12 +186,18 @@ runs:
           echo "Creating DEV (non-final) release..."
           bosh create-release \
             --name "${{ inputs.release_name }}" \
-            --version "${VERSION}" \
+            --version "${{ inputs.version }}" \  
             --tarball "$OUTPUT" \
             --force
         fi
 
         echo "release_tarball=$OUTPUT" >> $GITHUB_OUTPUT
+
+        ls -la ../rootfs-artifacts/ | grep "cflinuxfs5-release-${VERSION}.tgz"
+        if [[ -f "$OUTPUT" ]]; then
+          echo "BOSH release created successfully:"
+          tar -tzf "$OUTPUT" | head -5  
+        fi    
 
     - name: Set output
       id: set-output
