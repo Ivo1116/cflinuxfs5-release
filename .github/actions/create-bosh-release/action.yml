@@ -70,19 +70,7 @@ runs:
         ref: ${{ inputs.golang_release_ref }}
         path: bosh-package-golang-release
 
-#    - name: Cache BOSH/BBL tools
-#      id: cache-tools
-#      uses: actions/cache@v4
-#      with:
-#        path: |
-#          /usr/local/bin/bbl
-#          /usr/local/bin/bosh
-#          /usr/local/bin/terraform
-#        key: ${{ runner.os }}-bbl-tools-v1  
-#        restore-keys: ${{ runner.os }}-bbl-tools-
-
     - name: Install bosh CLI
-      if: steps.cache-tools.outputs.cache-hit != 'true'
       shell: bash
       run: |
         VERSION="${{ inputs.bosh_cli_version }}"
@@ -96,18 +84,8 @@ runs:
       run: |
         set -euo pipefail
         
-        mkdir -p ${{ inputs.release_dir }}/config
-
-        echo "AWS_ACCESS_KEY_ID starts with: ${AWS_ACCESS_KEY_ID:0:4}***"
-        echo "AWS_SESSION_TOKEN present: ${AWS_SESSION_TOKEN:+yes}"
-
-        mkdir -p ~/.aws
-        cat > ~/.aws/credentials <<EOF
-        [default]
-        aws_access_key_id = $AWS_ACCESS_KEY_ID
-        aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
-        aws_session_token = $AWS_SESSION_TOKEN
-        EOF
+        cd ${{ inputs.release_dir }}
+        mkdir -p config
 
         cat > config/private.yml <<EOF
         ---
@@ -116,65 +94,104 @@ runs:
           options:
             bucket_name: ${{ inputs.bucket_name }}
             region: ${{ env.AWS_REGION }}
+            credentials_source: env_or_profile
         EOF
 
-    - name: Build BOSH release
-      id: build
+    - name: Initialize blobs structure
       shell: bash
       run: |
         set -euo pipefail
         
-        STACK="${{ inputs.stack }}"
-        VERSION="${{ inputs.version }}"
-        GO_VERSION="${{ inputs.go_version }}"
-        FINAL="${{ inputs.final }}"
-
-        cd "${{ inputs.release_dir }}"
-
-        bosh target none || true
-        echo "BOSH target reset to local (no director)"
-
-        if [[ -f config/blobs.yml ]]; then
-          echo "Cleaning existing blobs.yml..."
-          rm -f config/blobs.yml
-        else
-          echo "No existing blobs.yml - fresh build"
+        cd ${{ inputs.release_dir }}
+        
+        # Create blobs.yml if it doesn't exist
+        if [[ ! -f config/blobs.yml ]]; then
+          echo "Creating empty blobs.yml..."
+          mkdir -p config
+          echo "---" > config/blobs.yml
+          echo "{}" >> config/blobs.yml
         fi
-
-        bosh remove-blob cflinuxfs5-rootfs-setup || true
-        bosh remove-blob cflinuxfs5-smoke-test || true
-        bosh remove-blob rootfs-certsplitter-cflinuxfs5 || true
-        bosh remove-blob golang-1-linux || true
-
+        
+        # Clean existing blobs if needed
+        if [[ -f config/blobs.yml ]] && grep -q "cflinuxfs5-rootfs-setup\|cflinuxfs5-smoke-test\|rootfs-certsplitter-cflinuxfs5\|golang-1-linux" config/blobs.yml 2>/dev/null; then
+          echo "Cleaning old blob references..."
+          bosh remove-blob cflinuxfs5-rootfs-setup 2>/dev/null || true
+          bosh remove-blob cflinuxfs5-smoke-test 2>/dev/null || true
+          bosh remove-blob rootfs-certsplitter-cflinuxfs5 2>/dev/null || true
+          bosh remove-blob golang-1-linux 2>/dev/null || true
+        fi
+        
+        # Clean dev builds
         if [[ -d dev_builds ]]; then
           echo "Cleaning dev_builds directory..."
           rm -rf dev_builds
-        else
-          echo "No dev_builds - fresh"
         fi
 
+    - name: Vendor Golang package
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        cd ${{ inputs.release_dir }}
+        
+        echo "Vendoring golang-1-linux package..."
         bosh vendor-package golang-1-linux ../bosh-package-golang-release
-
+        
+        GO_VERSION="${{ inputs.go_version }}"
         GO_BLOB_DIR="blobs/golang-1-linux"
         GO_BLOB_FILE="go${GO_VERSION}.linux-amd64.tar.gz"
+        
         mkdir -p "${GO_BLOB_DIR}"
+        
         if [[ ! -f "${GO_BLOB_DIR}/${GO_BLOB_FILE}" ]]; then
           echo "Downloading Go ${GO_VERSION} blob..."
           curl -L "https://go.dev/dl/${GO_BLOB_FILE}" -o "${GO_BLOB_DIR}/${GO_BLOB_FILE}"
           bosh add-blob "${GO_BLOB_DIR}/${GO_BLOB_FILE}" "golang-1-linux/${GO_BLOB_FILE}"
         else
-          echo "Go blob already exists - skipping download"
+          echo "Go blob already exists"
         fi
 
+    - name: Add rootfs blob
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        cd ${{ inputs.release_dir }}
+        
+        STACK="${{ inputs.stack }}"
+        VERSION="${{ inputs.version }}"
+        
         mkdir -p blobs/rootfs
-        cp ../rootfs-artifacts/${STACK}-${VERSION}.tar.gz blobs/rootfs/${STACK}-${VERSION}.tar.gz
+        cp ../rootfs-artifacts/${STACK}-${VERSION}.tar.gz blobs/rootfs/
+        
+        echo "Adding rootfs blob..."
         bosh add-blob blobs/rootfs/${STACK}-${VERSION}.tar.gz rootfs/${STACK}-${VERSION}.tar.gz
 
-        bosh sync-blobs || true
+    - name: Sync blobs
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        cd ${{ inputs.release_dir }}
+        
+        echo "Syncing blobs to blobstore..."
+        bosh sync-blobs
 
+    - name: Create BOSH release
+      id: build
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        cd ${{ inputs.release_dir }}
+        
+        STACK="${{ inputs.stack }}"
+        VERSION="${{ inputs.version }}"
+        FINAL="${{ inputs.final }}"
+        
         mkdir -p ../rootfs-artifacts
         OUTPUT="../rootfs-artifacts/${STACK}-release-${VERSION}.tgz"
-
+        
         if [[ "$FINAL" == "true" ]]; then
           echo "Creating FINAL release..."
           bosh create-release --final \
@@ -186,18 +203,22 @@ runs:
           echo "Creating DEV (non-final) release..."
           bosh create-release \
             --name "${{ inputs.release_name }}" \
-            --version "${{ inputs.version }}" \  
+            --version "${VERSION}" \
             --tarball "$OUTPUT" \
             --force
         fi
-
+        
         echo "release_tarball=$OUTPUT" >> $GITHUB_OUTPUT
-
-        ls -la ../rootfs-artifacts/ | grep "cflinuxfs5-release-${VERSION}.tgz"
+        
         if [[ -f "$OUTPUT" ]]; then
           echo "BOSH release created successfully:"
-          tar -tzf "$OUTPUT" | head -5  
-        fi    
+          ls -lh "$OUTPUT"
+          echo "Contents preview:"
+          tar -tzf "$OUTPUT" | head -10
+        else
+          echo "ERROR: Release tarball not created!"
+          exit 1
+        fi
 
     - name: Set output
       id: set-output
