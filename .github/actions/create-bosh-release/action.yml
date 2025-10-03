@@ -109,17 +109,6 @@ runs:
         aws_session_token = $AWS_SESSION_TOKEN
         EOF
 
-        echo "Temp ~/.aws/credentials created (lengths: key=${#AWS_ACCESS_KEY_ID}, token=${#AWS_SESSION_TOKEN})"
-
-        cd "${{ inputs.release_dir }}"
-        rm -f config/blobs.yml  # Cached blob list
-        bosh remove-blob cflinuxfs5-rootfs-setup || true
-        bosh remove-blob cflinuxfs5-smoke-test || true
-        bosh remove-blob rootfs-certsplitter-cflinuxfs5 || true
-        bosh remove-blob golang-1-linux || true
-        rm -rf dev_builds/  # Cleanup dev builds
-        echo "Stale blobs cleaned - BOSH will build fresh"
-
         cat > config/private.yml <<EOF
         ---
         blobstore:
@@ -129,13 +118,8 @@ runs:
             region: ${{ env.AWS_REGION }}
         EOF
 
-        echo "BOSH private.yml configured (uses ~/.aws/credentials for auth)"
         cat config/private.yml
 
-        bosh env  # Should use creds
-        aws sts get-caller-identity --profile default  # Test file
-
-        echo "BOSH config complete - proceed to build"
 
     - name: Build BOSH release
       id: build

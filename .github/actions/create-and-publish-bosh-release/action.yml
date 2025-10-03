@@ -61,17 +61,28 @@ runs:
     - name: Configure BOSH blobstore
       shell: bash
       run: |
-        mkdir -p release/config
-        cat > release/config/private.yml <<EOF
+        set -euo pipefail
+        
+        mkdir -p ${{ inputs.release_dir }}/config
+
+        echo "AWS_ACCESS_KEY_ID starts with: ${AWS_ACCESS_KEY_ID:0:4}***"
+        echo "AWS_SESSION_TOKEN present: ${AWS_SESSION_TOKEN:+yes}"
+
+        mkdir -p ~/.aws
+        cat > ~/.aws/credentials <<EOF
+        [default]
+        aws_access_key_id = $AWS_ACCESS_KEY_ID
+        aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+        aws_session_token = $AWS_SESSION_TOKEN
+        EOF
+
+        cat > config/private.yml <<EOF
+        ---
         blobstore:
           provider: s3
           options:
             bucket_name: ${{ inputs.bucket_name }}
-            access_key_id: $AWS_ACCESS_KEY_ID
-            secret_access_key: $AWS_SECRET_ACCESS_KEY
-            session_token: $AWS_SESSION_TOKEN
             region: ${{ env.AWS_REGION }}
-            endpoint: https://s3.${{ env.AWS_REGION }}.amazonaws.com
         EOF
 
     - name: Create final BOSH release
