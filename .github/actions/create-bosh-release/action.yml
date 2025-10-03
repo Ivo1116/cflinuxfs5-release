@@ -70,16 +70,16 @@ runs:
         ref: ${{ inputs.golang_release_ref }}
         path: bosh-package-golang-release
 
-    - name: Cache BOSH/BBL tools
-      id: cache-tools
-      uses: actions/cache@v4
-      with:
-        path: |
-          /usr/local/bin/bbl
-          /usr/local/bin/bosh
-          /usr/local/bin/terraform
-        key: ${{ runner.os }}-bbl-tools-v1  
-        restore-keys: ${{ runner.os }}-bbl-tools-
+#    - name: Cache BOSH/BBL tools
+#      id: cache-tools
+#      uses: actions/cache@v4
+#      with:
+#        path: |
+#          /usr/local/bin/bbl
+#          /usr/local/bin/bosh
+#          /usr/local/bin/terraform
+#        key: ${{ runner.os }}-bbl-tools-v1  
+#        restore-keys: ${{ runner.os }}-bbl-tools-
 
     - name: Install bosh CLI
       if: steps.cache-tools.outputs.cache-hit != 'true'
