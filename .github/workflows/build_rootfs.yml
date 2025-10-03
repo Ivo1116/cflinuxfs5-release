@@ -161,6 +161,25 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
+
+      - name: S3 Policy Test
+        run: |
+          echo "=== Caller Identity ==="
+          aws sts get-caller-identity
+          
+          echo "=== List Bucket (Bucket-Level) ==="
+          aws s3 ls s3://cflinuxfs5test/ --max-items 5
+          
+          echo "=== HeadObject (Object-Level) ==="
+          aws s3api head-object --bucket cflinuxfs5test --key "test-key-doesnt-exist.txt" 2>&1 || echo "HeadObject result: $?"
+          
+          echo "=== PutObject Test ==="
+          echo "policy-test-$(date +%s)" | aws s3 cp - s3://cflinuxfs5test/policy-test-$(date +%s).txt
+          aws s3 ls s3://cflinuxfs5test/ | grep policy-test
+          aws s3 rm s3://cflinuxfs5test/policy-test-$(date +%s).txt
+          
+          echo "=== Policy Test Complete ==="
+
       - name: Build rootfs and process artifacts
         uses: ./.github/actions/build-and-process-rootfs
         with:
