@@ -82,9 +82,15 @@ jobs:
           packages: '["golang-1-linux"]'
           private_yml: |
             blobstore:
-              provider: s3
-              options:
-                bucket_name: ${{ env.BUCKET_NAME }}
+             provider: s3
+             options:
+               bucket_name: ${{ inputs.bucket_name }}
+               access_key_id: $AWS_ACCESS_KEY_ID
+               secret_access_key: $AWS_SECRET_ACCESS_KEY
+               session_token: $AWS_SESSION_TOKEN
+               region: ${{ env.AWS_REGION }}
+               endpoint: https://s3.${{ env.AWS_REGION }}.amazonaws.com
+            EOF
           cflinuxfs_release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
           golang_release_repo: ${{ env.GOLANG_RELEASE_REPO }}
@@ -160,35 +166,6 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
-
-
-      - name: Test S3 Access Like BOSH (Direct)
-        run: |
-          echo "=== 1. Role Confirmation ==="
-          aws sts get-caller-identity
-          
-          echo "=== 2. List Bucket (s3:ListBucket) ==="
-          aws s3 ls s3://cflinuxfs5test/ --region us-east-1
-          
-          echo "=== 3. GetBucketLocation ==="
-          aws s3api get-bucket-location --bucket cflinuxfs5test
-          
-          echo "=== 4. HeadObject on Failing Blob (s3:HeadObject) ==="
-          aws s3api head-object --bucket cflinuxfs5test --key "cflinuxfs5-rootfs-setup/c0217375eb0a204c8e81244545b77647fbfa09a828c4198d4f7da0c592876734" --region us-east-1 2>&1 || echo "Result: NoSuchKey or AccessDenied (code $?)"
-          
-          echo "=== 5. PutObject Test (s3:PutObject) ==="
-          TEST_KEY="bosh-test-$(date +%s).txt"
-          echo "BOSH test - $(date)" | aws s3 cp - s3://cflinuxfs5test/$TEST_KEY --region us-east-1
-          if [ $? -eq 0 ]; then
-            echo "Put success!"
-            aws s3 ls s3://cflinuxfs5test/ | grep $TEST_KEY
-            aws s3 rm s3://cflinuxfs5test/$TEST_KEY --region us-east-1
-            echo "Delete success!"
-          else
-            echo "Put failed - access denied."
-          fi
-          
-          echo "=== S3 Test Done - If HeadObject 404 and Put success, BOSH should work ==="
 
       - name: Build rootfs and process artifacts
         uses: ./.github/actions/build-and-process-rootfs
