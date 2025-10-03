@@ -23,7 +23,7 @@ inputs:
   bosh_cli_version:
     description: 'Version of bosh-cli to install'
     required: false
-    default: "7.5.6"
+    default: "7.9.11"
   go_version:
     description: 'Go version to vendor as a blob under golang-1-linux (e.g., 1.24.6)'
     required: true
