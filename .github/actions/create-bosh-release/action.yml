@@ -209,16 +209,6 @@ runs:
         fi
         
         echo "release_tarball=$OUTPUT" >> $GITHUB_OUTPUT
-        
-        if [[ -f "$OUTPUT" ]]; then
-          echo "BOSH release created successfully:"
-          ls -lh "$OUTPUT"
-          echo "Contents preview:"
-          tar -tzf "$OUTPUT" | head -10
-        else
-          echo "ERROR: Release tarball not created!"
-          exit 1
-        fi
 
     - name: Set output
       id: set-output
