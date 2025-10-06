@@ -94,6 +94,7 @@ runs:
           options:
             bucket_name: ${{ inputs.bucket_name }}
             region: ${{ env.AWS_REGION }}
+            prefix: bosh-blobs
             credentials_source: env_or_profile
         EOF
 

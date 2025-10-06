@@ -85,11 +85,8 @@ jobs:
              provider: s3
              options:
                bucket_name: ${{ inputs.bucket_name }}
-               access_key_id: $AWS_ACCESS_KEY_ID
-               secret_access_key: $AWS_SECRET_ACCESS_KEY
-               session_token: $AWS_SESSION_TOKEN
+               prefix: bosh-blobs
                region: ${{ env.AWS_REGION }}
-               endpoint: https://s3.${{ env.AWS_REGION }}.amazonaws.com
             EOF
           cflinuxfs_release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
