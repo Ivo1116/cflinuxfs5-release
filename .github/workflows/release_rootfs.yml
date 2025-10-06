@@ -154,8 +154,6 @@ jobs:
   upload-to-github:
     name: Upload to GitHub
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     needs: [release-rootfs-repo, resolve-inputs]
     if: needs.resolve-inputs.outputs.skip_github_release != 'true'
     steps:
@@ -208,8 +206,6 @@ jobs:
   create-bosh-release:
     name: Create and Publish BOSH Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     needs: [release-rootfs-repo, resolve-inputs]
     if: needs.resolve-inputs.outputs.skip_bosh_release != 'true'
     steps:
