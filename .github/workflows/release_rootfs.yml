@@ -162,6 +162,12 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Upload to GitHub release
         uses: ./.github/actions/upload-to-github
         with:
