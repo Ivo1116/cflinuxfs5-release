@@ -138,6 +138,7 @@ runs:
         
         bbl up \
           --iaas gcp \
+          --gcp-service-account-key "${GOOGLE_APPLICATION_CREDENTIALS}" \
           --gcp-project-id "$BBL_GCP_PROJECT_ID" \
           --gcp-zone "$BBL_GCP_ZONE" \
           --gcp-region "$BBL_GCP_REGION" \
