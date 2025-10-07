@@ -56,19 +56,7 @@ runs:
         path: bbl-state
         ssh-key: ${{ inputs.bbl_state_deploy_key }}
 
-    - name: Cache BOSH/BBL tools
-      id: cache-tools
-      uses: actions/cache@v4
-      with:
-        path: |
-          /usr/local/bin/bbl
-          /usr/local/bin/bosh
-          /usr/local/bin/terraform
-        key: ${{ runner.os }}-bbl-tools-v1  
-        restore-keys: ${{ runner.os }}-bbl-tools-
-
     - name: Install BBL, Terraform, BOSH CLI
-      if: steps.cache-tools.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
@@ -84,6 +72,17 @@ runs:
         wget -O /tmp/bosh https://github.com/cloudfoundry/bosh-cli/releases/download/v7.4.0/bosh-cli-7.4.0-linux-amd64
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
+
+    - name: Cache BOSH/BBL tools
+      id: cache-tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/bin/bbl
+          /usr/local/bin/bosh
+          /usr/local/bin/terraform
+        key: ${{ runner.os }}-bbl-tools-v1 
+        restore-keys: ${{ runner.os }}-bbl-tools-
 
     - name: Run BBL Up
       id: bbl-up
