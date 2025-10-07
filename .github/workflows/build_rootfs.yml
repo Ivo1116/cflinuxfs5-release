@@ -87,7 +87,7 @@ jobs:
                 bucket_name: ${{ env.BUCKET_NAME }}
                 prefix: bosh-blobs
                 region: ${{ env.AWS_REGION }}
-                credentials_source: assume_role
+                credentials_source: env_or_profile
           cflinuxfs_release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
           golang_release_repo: ${{ env.GOLANG_RELEASE_REPO }}
