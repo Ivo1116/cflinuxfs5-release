@@ -1,5 +1,5 @@
 name: 'BBL Up'
-description: 'Set up test environment using BBL'
+description: 'Set up test environment using BBL with OIDC authentication'
 
 inputs:
   stack:
@@ -73,8 +73,8 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
 
-    - name: Create BBL-compatible GCP credentials from OIDC
-      id: gcp-creds
+    - name: Setup GCP authentication for BBL
+      id: gcp-setup
       shell: bash
       run: |
         set -euo pipefail
@@ -84,109 +84,69 @@ runs:
           exit 1
         fi
         
-        echo "OIDC credentials file found: ${GOOGLE_APPLICATION_CREDENTIALS}"
+        echo "OIDC credentials file: ${GOOGLE_APPLICATION_CREDENTIALS}"
+        
+        gcloud auth login --cred-file="${GOOGLE_APPLICATION_CREDENTIALS}" --quiet
+        
+        SA_EMAIL=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
+        
+        if [[ -z "$SA_EMAIL" ]]; then
+          echo "ERROR: Could not determine service account email after authentication"
+          gcloud auth list
+          exit 1
+        fi
+        
+        echo "✓ Authenticated as: $SA_EMAIL"
+        echo "✓ Project: ${{ inputs.gcp_project_id }}"
         
         TEMP_DIR=$(mktemp -d)
         chmod 700 "$TEMP_DIR"
         
-        SA_EMAIL=$(gcloud config get-value account 2>/dev/null || gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -1)
-        
-        if [[ -z "$SA_EMAIL" ]]; then
-          echo "ERROR: Could not determine service account email"
-          exit 1
-        fi
-        
-        echo "Service Account: $SA_EMAIL"
-        echo "Project ID: ${{ inputs.gcp_project_id }}"
-        
-        cat > "$TEMP_DIR/bbl-gcp-key.json" <<EOF
-        {
-          "type": "service_account",
-          "project_id": "${{ inputs.gcp_project_id }}",
-          "private_key_id": "oidc-key",
-          "private_key": "-----BEGIN PRIVATE KEY-----\nOIDC\n-----END PRIVATE KEY-----\n",
-          "client_email": "$SA_EMAIL",
-          "client_id": "oidc-client",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-          "universe_domain": "googleapis.com"
-        }
-        EOF
-        
-        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
-        echo "GOOGLE_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}" >> "$GITHUB_ENV"
-        
-        echo "GCP_KEY_FILE=$TEMP_DIR/bbl-gcp-key.json" >> "$GITHUB_OUTPUT"
-        echo "TEMP_DIR=$TEMP_DIR" >> "$GITHUB_OUTPUT"
-        
-        echo "Created BBL-compatible credentials file with OIDC backend"
-
-    - name: Run BBL Up
-      id: bbl-up
-      shell: bash
-      run: |
-        set -euo pipefail
-        export PATH="/usr/local/bin:$PATH"
-
-        TEMP_DIR="${{ steps.gcp-creds.outputs.TEMP_DIR }}"
-        
-        mkdir -p bbl-state/${{ inputs.env_name }}
-        cd bbl-state/${{ inputs.env_name }}
-
-        # Get GCP credentials file path
-        GCP_KEY_FILE="${{ steps.gcp-creds.outputs.GCP_KEY_FILE }}"
-        
-        if [[ ! -f "$GCP_KEY_FILE" ]]; then
-          echo "ERROR: GCP key file not found: $GCP_KEY_FILE"
-          exit 1
-        fi
-        
-        echo "Using GCP credentials with OIDC authentication"
-
         echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
         echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
         chmod 600 "$TEMP_DIR"/*.pem
         
-        export BBL_LB_CERT="$TEMP_DIR/lb-cert.pem"
-        export BBL_LB_KEY="$TEMP_DIR/lb-key.pem"
-        
-        export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
-        export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
-        export BBL_GCP_REGION="${{ inputs.gcp_region }}"
-        export BBL_IAAS=gcp
-        
-        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
+        echo "TEMP_DIR=$TEMP_DIR" >> "$GITHUB_OUTPUT"
+        echo "SA_EMAIL=$SA_EMAIL" >> "$GITHUB_OUTPUT"
 
-        if [[ -n "${{ inputs.lb_domain }}" ]]; then
-          export LB_DOMAIN="${{ inputs.lb_domain }}"
-        fi
-
+    - name: Run BBL Up
+      id: bbl-up
+      shell: bash
+      env:
+        BBL_GCP_PROJECT_ID: ${{ inputs.gcp_project_id }}
+        BBL_GCP_ZONE: ${{ inputs.gcp_zone }}
+        BBL_GCP_REGION: ${{ inputs.gcp_region }}
+        BBL_IAAS: gcp
+        LB_DOMAIN: ${{ inputs.lb_domain }}
+      run: |
+        set -euo pipefail
+        
+        TEMP_DIR="${{ steps.gcp-setup.outputs.TEMP_DIR }}"
+        
+        mkdir -p bbl-state/${{ inputs.env_name }}
+        cd bbl-state/${{ inputs.env_name }}
+        
         echo "=== BBL Configuration ==="
+        echo "Environment: ${{ inputs.env_name }}"
         echo "Project ID: $BBL_GCP_PROJECT_ID"
         echo "Zone: $BBL_GCP_ZONE"
         echo "Region: $BBL_GCP_REGION"
-        echo "IAAS: $BBL_IAAS"
-        echo "LB Domain: ${LB_DOMAIN:-not set}"
-        echo "LB Cert: ${BBL_LB_CERT}"
-        echo "LB Key: ${BBL_LB_KEY}"
-        echo "GCP Key: $GCP_KEY_FILE"
-        echo "Using OIDC: ${GOOGLE_APPLICATION_CREDENTIALS}"
+        echo "Service Account: ${{ steps.gcp-setup.outputs.SA_EMAIL }}"
+        echo "LB Domain: $LB_DOMAIN"
+        echo "Using OIDC authentication"
         echo "========================="
-
+        
         bbl up \
           --iaas gcp \
-          --gcp-service-account-key "$GCP_KEY_FILE" \
           --gcp-project-id "$BBL_GCP_PROJECT_ID" \
           --gcp-zone "$BBL_GCP_ZONE" \
           --gcp-region "$BBL_GCP_REGION" \
-          --terraform-binary /usr/local/bin/terraform \
           --lb-type cf \
-          --lb-cert "$BBL_LB_CERT" \
-          --lb-key "$BBL_LB_KEY" \
-          ${LB_DOMAIN:+--lb-domain "$LB_DOMAIN"}
-
-        echo "BBL up completed successfully"
+          --lb-cert "$TEMP_DIR/lb-cert.pem" \
+          --lb-key "$TEMP_DIR/lb-key.pem" \
+          --lb-domain "$LB_DOMAIN"
+        
+        echo "✓ BBL up completed successfully"
         echo "success=true" >> "$GITHUB_OUTPUT"
 
     - name: Commit and push BBL state
@@ -194,51 +154,33 @@ runs:
       run: |
         set -euo pipefail
         cd bbl-state
+        
         git config user.name "CF Buildpacks Eng Bot"
         git config user.email "test@test.com"
         
         cat >> .gitignore <<'EOF'
         # Secrets
-        **/gcp-key.json
-        **/service-account-key.json
-        **/*-key.json
-        **/*.key
         **/*.pem
-        **/private_key
-        **/id_rsa*
-        **/.ssh/
-        **/credentials
-        **/*secret*
-        **/*password*
+        **/*.key
+        **/vars/*
+        **/creds.yml
         EOF
-
+        
         if [[ -n "$(git status --porcelain)" ]]; then
-          git add -A .gitignore
-          git add -A ${{ inputs.env_name }}
+          git add -A
           git commit -m "Update BBL state for ${{ inputs.env_name }}"
           git push origin ${{ inputs.bbl_state_branch }}
-          echo "BBL state changes committed and pushed"
+          echo "✓ BBL state committed and pushed"
         else
           echo "No BBL state changes to commit"
         fi
 
-    - name: Cleanup sensitive files
+    - name: Cleanup
       if: always()
       shell: bash
       run: |
-        set +e
-        
-        if [[ -n "${{ steps.gcp-creds.outputs.TEMP_DIR }}" ]]; then
-          rm -rf "${{ steps.gcp-creds.outputs.TEMP_DIR }}"
+        TEMP_DIR="${{ steps.gcp-setup.outputs.TEMP_DIR }}"
+        if [[ -n "$TEMP_DIR" ]] && [[ -d "$TEMP_DIR" ]]; then
+          rm -rf "$TEMP_DIR"
+          echo "✓ Cleanup completed"
         fi
-        
-        find bbl-state -type f \( \
-          -name "*.pem" -o \
-          -name "*.key" -o \
-          -name "*-key.json" -o \
-          -name "private_key" -o \
-          -name "id_rsa*" -o \
-          -name "credentials" \
-        \) -exec shred -vfz -n 3 {} \; 2>/dev/null || true
-        
-        echo "Cleanup completed"
