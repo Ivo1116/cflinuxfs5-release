@@ -118,7 +118,6 @@ runs:
         BBL_GCP_REGION: ${{ inputs.gcp_region }}
         BBL_IAAS: gcp
         LB_DOMAIN: ${{ inputs.lb_domain }}
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
       run: |
         set -euo pipefail
         
@@ -134,27 +133,38 @@ runs:
         echo "Region: $BBL_GCP_REGION"
         echo "Service Account: ${{ steps.gcp-setup.outputs.SA_EMAIL }}"
         echo "LB Domain: $LB_DOMAIN"
-        echo "Using OIDC authentication via Application Default Credentials"
+        echo "Using OIDC authentication"
         echo "========================="
+        
+        export GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
+        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
+        
+        mkdir -p terraform/override
+        
+        cat > terraform/override/credentials_override.tf <<'EOF'
+        provider "google" {
+          # Use Application Default Credentials (from GOOGLE_APPLICATION_CREDENTIALS)
+          # Remove any explicit credentials configuration
+        }
+        EOF
         
         FAKE_KEY="$TEMP_DIR/fake-sa-key.json"
         cat > "$FAKE_KEY" <<EOF
         {
           "type": "service_account",
           "project_id": "$BBL_GCP_PROJECT_ID",
-          "private_key_id": "fake-key-id",
-          "private_key": "-----BEGIN PRIVATE KEY-----\\nfake\\n-----END PRIVATE KEY-----\\n",
+          "private_key_id": "unused",
+          "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDU2XXXXX\\n-----END PRIVATE KEY-----\\n",
           "client_email": "${{ steps.gcp-setup.outputs.SA_EMAIL }}",
-          "client_id": "fake-client-id",
+          "client_id": "000000000000000000000",
           "auth_uri": "https://accounts.google.com/o/oauth2/auth",
           "token_uri": "https://oauth2.googleapis.com/token",
           "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs"
         }
         EOF
         
-        export GOOGLE_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS"
-        
-        bbl up \
+        echo "Generating BBL plan..."
+        bbl plan \
           --iaas gcp \
           --gcp-service-account-key "$FAKE_KEY" \
           --gcp-project-id "$BBL_GCP_PROJECT_ID" \
@@ -164,6 +174,21 @@ runs:
           --lb-cert "$TEMP_DIR/lb-cert.pem" \
           --lb-key "$TEMP_DIR/lb-key.pem" \
           --lb-domain "$LB_DOMAIN"
+        
+        echo "Modifying Terraform configuration to use OIDC..."
+        
+        if [[ -f terraform/gcp/gcp_backend.tf ]]; then
+          sed -i '/credentials/d' terraform/gcp/gcp_backend.tf
+        fi
+        
+        cat > terraform/gcp/oidc_override.tf <<'EOF'
+        provider "google" {
+          # Credentials from GOOGLE_APPLICATION_CREDENTIALS environment variable
+        }
+        EOF
+        
+        echo "Running BBL up with OIDC credentials..."
+        bbl up --lb-domain "$LB_DOMAIN"
         
         echo "✓ BBL up completed successfully"
         echo "success=true" >> "$GITHUB_OUTPUT"
