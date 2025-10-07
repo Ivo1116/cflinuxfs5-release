@@ -118,6 +118,7 @@ runs:
         BBL_GCP_REGION: ${{ inputs.gcp_region }}
         BBL_IAAS: gcp
         LB_DOMAIN: ${{ inputs.lb_domain }}
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
       run: |
         set -euo pipefail
         
@@ -133,12 +134,29 @@ runs:
         echo "Region: $BBL_GCP_REGION"
         echo "Service Account: ${{ steps.gcp-setup.outputs.SA_EMAIL }}"
         echo "LB Domain: $LB_DOMAIN"
-        echo "Using OIDC authentication"
+        echo "Using OIDC authentication via Application Default Credentials"
         echo "========================="
+        
+        FAKE_KEY="$TEMP_DIR/fake-sa-key.json"
+        cat > "$FAKE_KEY" <<EOF
+        {
+          "type": "service_account",
+          "project_id": "$BBL_GCP_PROJECT_ID",
+          "private_key_id": "fake-key-id",
+          "private_key": "-----BEGIN PRIVATE KEY-----\\nfake\\n-----END PRIVATE KEY-----\\n",
+          "client_email": "${{ steps.gcp-setup.outputs.SA_EMAIL }}",
+          "client_id": "fake-client-id",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs"
+        }
+        EOF
+        
+        export GOOGLE_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS"
         
         bbl up \
           --iaas gcp \
-          --gcp-service-account-key "${GOOGLE_APPLICATION_CREDENTIALS}" \
+          --gcp-service-account-key "$FAKE_KEY" \
           --gcp-project-id "$BBL_GCP_PROJECT_ID" \
           --gcp-zone "$BBL_GCP_ZONE" \
           --gcp-region "$BBL_GCP_REGION" \
