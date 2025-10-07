@@ -41,7 +41,7 @@ env:
   GCP_ZONE: us-central1-a
   SYSTEM_DOMAIN: test.gcp.cfrt-sof.sapcloud.io
   GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPMb9xqMjZzIYWRiCJq976v5K8O0FDln4djspB
-  BBL_UP_DELAY_SECONDS: 300
+  BBL_UP_DELAY_SECONDS: 600
 
 permissions:
   contents: write
