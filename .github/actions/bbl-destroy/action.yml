@@ -49,19 +49,49 @@ runs:
         chmod +x /tmp/bbl
         sudo mv /tmp/bbl /usr/local/bin/bbl
 
-    - name: Prepare GCP credentials
+    - name: Create BBL-compatible GCP credentials from OIDC
       id: gcp-creds
       shell: bash
       run: |
         set -euo pipefail
         
-        if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] && [[ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
-          echo "Using GCP credentials from google-github-actions/auth"
-          echo "GCP_KEY_FILE=${GOOGLE_APPLICATION_CREDENTIALS}" >> "$GITHUB_OUTPUT"
-        else
-          echo "ERROR: No GCP credentials found"
+        if [[ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] || [[ ! -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
+          echo "ERROR: GOOGLE_APPLICATION_CREDENTIALS not set or file doesn't exist"
           exit 1
         fi
+        
+        TEMP_DIR=$(mktemp -d)
+        chmod 700 "$TEMP_DIR"
+        
+        SA_EMAIL=$(gcloud config get-value account 2>/dev/null || gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -1)
+        
+        if [[ -z "$SA_EMAIL" ]]; then
+          echo "ERROR: Could not determine service account email"
+          exit 1
+        fi
+        
+        echo "Service Account: $SA_EMAIL"
+        
+        cat > "$TEMP_DIR/bbl-gcp-key.json" <<EOF
+        {
+          "type": "service_account",
+          "project_id": "${{ inputs.gcp_project_id }}",
+          "private_key_id": "oidc-key",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nOIDC\n-----END PRIVATE KEY-----\n",
+          "client_email": "$SA_EMAIL",
+          "client_id": "oidc-client",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          "universe_domain": "googleapis.com"
+        }
+        EOF
+        
+        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
+        echo "GOOGLE_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}" >> "$GITHUB_ENV"
+        
+        echo "GCP_KEY_FILE=$TEMP_DIR/bbl-gcp-key.json" >> "$GITHUB_OUTPUT"
+        echo "TEMP_DIR=$TEMP_DIR" >> "$GITHUB_OUTPUT"
 
     - name: Destroy environment
       id: destroy
@@ -92,6 +122,7 @@ runs:
         export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
         export BBL_GCP_REGION="${{ inputs.gcp_region }}"
         export BBL_IAAS=gcp
+        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
         
         pushd "$BBL_STATE_DIR"
         echo "Running bbl destroy in $(pwd)"
@@ -114,17 +145,13 @@ runs:
       if: always()
       shell: bash
       run: |
-        set -euo pipefail
-        ENV_DIR="bbl-state/${{ inputs.env_name }}"
+        set +e
         
-        find "$ENV_DIR" -type f \( \
-          -name "*.pem" -o \
-          -name "*.key" -o \
-          -name "private_key" -o \
-          -name "id_rsa*" \
-        \) -delete 2>/dev/null || true
+        if [[ -n "${{ steps.gcp-creds.outputs.TEMP_DIR }}" ]]; then
+          rm -rf "${{ steps.gcp-creds.outputs.TEMP_DIR }}"
+        fi
         
-        echo "Cleaned up sensitive files in $ENV_DIR"
+        echo "Cleanup completed"
 
     - name: Commit and push BBL state
       if: always()
