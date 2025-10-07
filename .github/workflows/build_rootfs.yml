@@ -82,12 +82,11 @@ jobs:
           packages: '["golang-1-linux"]'
           private_yml: |
             blobstore:
-             provider: s3
-             options:
-               bucket_name: ${{ inputs.bucket_name }}
-               prefix: bosh-blobs
-               region: ${{ env.AWS_REGION }}
-            EOF
+              provider: s3
+              options:
+                bucket_name: ${{ env.BUCKET_NAME }}
+                prefix: bosh-blobs
+                region: ${{ env.AWS_REGION }}
           cflinuxfs_release_repo: ${{ env.RELEASE_REPO }}
           cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
           golang_release_repo: ${{ env.GOLANG_RELEASE_REPO }}
