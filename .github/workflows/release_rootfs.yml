@@ -233,6 +233,14 @@ jobs:
           owner: ${{ env.REPO_OWNER }}
           release_deploy_key: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 
+      - name: Delete RC BOSH release artifact
+        uses: ./.github/actions/delete-rc-artifacts
+        with:
+          stack: ${{ env.STACK }}
+          rc_version: ${{ needs.resolve-inputs.outputs.rc_version }}
+          bucket_name: ${{ env.BUCKET_NAME }}
+          artifact_types: 'stack, receipt, release'
+
   summary:
     name: Release Summary
     runs-on: ubuntu-latest
