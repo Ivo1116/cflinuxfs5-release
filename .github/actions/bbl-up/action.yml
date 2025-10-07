@@ -56,12 +56,24 @@ runs:
         path: bbl-state
         ssh-key: ${{ inputs.bbl_state_deploy_key }}
 
+    - name: Cache BOSH/BBL tools
+      id: cache-tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/local/bin/bbl
+          /usr/local/bin/bosh
+          /usr/local/bin/terraform
+        key: ${{ runner.os }}-bbl-tools-v1  
+        restore-keys: ${{ runner.os }}-bbl-tools-
+
     - name: Install BBL, Terraform, BOSH CLI
+      if: steps.cache-tools.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
         
-        wget -O /tmp/bbl https://github.com/Ivo1116/bosh-bootloader/releases/download/test/bbl-linux
+        wget -O /tmp/bbl https://github.com/cloudfoundry/bosh-bootloader/releases/download/v9.0.36/bbl-v9.0.36_linux_amd64
         chmod +x /tmp/bbl
         sudo mv /tmp/bbl /usr/local/bin/bbl
 
@@ -73,24 +85,27 @@ runs:
         chmod +x /tmp/bosh
         sudo mv /tmp/bosh /usr/local/bin/bosh
 
-    - name: Cache BOSH/BBL tools
-      id: cache-tools
-      uses: actions/cache@v4
-      with:
-        path: |
-          /usr/local/bin/bbl
-          /usr/local/bin/bosh
-          /usr/local/bin/terraform
-        key: ${{ runner.os }}-bbl-tools-v1 
-        restore-keys: ${{ runner.os }}-bbl-tools-
+    - name: Prepare GCP credentials
+      id: gcp-creds
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] && [[ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
+          echo "Using GCP credentials from google-github-actions/auth"
+          echo "GCP_KEY_FILE=${GOOGLE_APPLICATION_CREDENTIALS}" >> "$GITHUB_OUTPUT"
+          echo "creds_source=workload_identity" >> "$GITHUB_OUTPUT"
+        else
+          echo "ERROR: No GCP credentials found"
+          echo "GOOGLE_APPLICATION_CREDENTIALS is not set or file doesn't exist"
+          echo "Available GCP-related env vars:"
+          env | grep -E "(GOOGLE|GCP|GCLOUD|CLOUDSDK)" | sed 's/=.*/=***/' || echo "No GCP env vars found"
+          exit 1
+        fi
 
     - name: Run BBL Up
       id: bbl-up
       shell: bash
-      env:
-        GCP_SERVICE_ACCOUNT_KEY: ${{ env.GCP_SERVICE_ACCOUNT_KEY }}
-        CFLINUXFS5_LB_CERT: ${{ env.CFLINUXFS5_LB_CERT }}
-        CFLINUXFS5_LB_KEY: ${{ env.CFLINUXFS5_LB_KEY }}
       run: |
         set -euo pipefail
         export PATH="/usr/local/bin:$PATH"
@@ -102,10 +117,21 @@ runs:
         mkdir -p bbl-state/${{ inputs.env_name }}
         cd bbl-state/${{ inputs.env_name }}
 
+        # Get GCP credentials file path
+        GCP_KEY_FILE="${{ steps.gcp-creds.outputs.GCP_KEY_FILE }}"
+        
+        if [[ ! -f "$GCP_KEY_FILE" ]]; then
+          echo "ERROR: GCP key file not found: $GCP_KEY_FILE"
+          exit 1
+        fi
+        
+        echo "Using GCP credentials file: $GCP_KEY_FILE"
+        echo "Credentials source: ${{ steps.gcp-creds.outputs.creds_source }}"
+
         echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
         echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
         chmod 600 "$TEMP_DIR"/*.pem
-
+        
         export BBL_LB_CERT="$TEMP_DIR/lb-cert.pem"
         export BBL_LB_KEY="$TEMP_DIR/lb-key.pem"
         
@@ -118,13 +144,30 @@ runs:
           export LB_DOMAIN="${{ inputs.lb_domain }}"
         fi
 
+        echo "=== BBL Configuration ==="
+        echo "Project ID: $BBL_GCP_PROJECT_ID"
+        echo "Zone: $BBL_GCP_ZONE"
+        echo "Region: $BBL_GCP_REGION"
+        echo "IAAS: $BBL_IAAS"
+        echo "LB Domain: ${LB_DOMAIN:-not set}"
+        echo "LB Cert: ${BBL_LB_CERT}"
+        echo "LB Key: ${BBL_LB_KEY}"
+        echo "GCP Key: $GCP_KEY_FILE"
+        echo "========================="
+
         bbl up \
+          --iaas gcp \
+          --gcp-service-account-key "$GCP_KEY_FILE" \
+          --gcp-project-id "$BBL_GCP_PROJECT_ID" \
+          --gcp-zone "$BBL_GCP_ZONE" \
+          --gcp-region "$BBL_GCP_REGION" \
           --terraform-binary /usr/local/bin/terraform \
           --lb-type cf \
-          ${BBL_LB_CERT:+--lb-cert "$BBL_LB_CERT"} \
-          ${BBL_LB_KEY:+--lb-key "$BBL_LB_KEY"} \
+          --lb-cert "$BBL_LB_CERT" \
+          --lb-key "$BBL_LB_KEY" \
           ${LB_DOMAIN:+--lb-domain "$LB_DOMAIN"}
 
+        echo "BBL up completed successfully"
         echo "success=true" >> "$GITHUB_OUTPUT"
 
     - name: Commit and push BBL state
@@ -155,8 +198,9 @@ runs:
           git add -A ${{ inputs.env_name }}
           git commit -m "Update BBL state for ${{ inputs.env_name }}"
           git push origin ${{ inputs.bbl_state_branch }}
+          echo "BBL state changes committed and pushed"
         else
-          echo "No BBL state changes to commit."
+          echo "No BBL state changes to commit"
         fi
 
     - name: Cleanup sensitive files

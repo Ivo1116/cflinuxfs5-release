@@ -61,6 +61,20 @@ runs:
         chmod +x /tmp/bbl
         sudo mv /tmp/bbl /usr/local/bin/bbl
 
+    - name: Prepare GCP credentials
+      id: gcp-creds
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] && [[ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
+          echo "Using GCP credentials from google-github-actions/auth"
+          echo "GCP_KEY_FILE=${GOOGLE_APPLICATION_CREDENTIALS}" >> "$GITHUB_OUTPUT"
+        else
+          echo "ERROR: No GCP credentials found"
+          exit 1
+        fi
+
     - name: Destroy environment
       id: destroy
       shell: bash
@@ -79,9 +93,13 @@ runs:
         
         echo "State dir found. Proceeding with destroy..."
         
-        KEY_FILE="$BBL_STATE_DIR/gcp-key.json"
-        printf "%s" "${GCP_SERVICE_ACCOUNT_KEY}" > "$KEY_FILE"
-        export BBL_GCP_SERVICE_ACCOUNT_KEY="$KEY_FILE"
+        GCP_KEY_FILE="${{ steps.gcp-creds.outputs.GCP_KEY_FILE }}"
+        
+        if [[ ! -f "$GCP_KEY_FILE" ]]; then
+          echo "ERROR: GCP key file not found: $GCP_KEY_FILE"
+          exit 1
+        fi
+        
         export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
         export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
         export BBL_GCP_REGION="${{ inputs.gcp_region }}"
@@ -89,7 +107,16 @@ runs:
         
         pushd "$BBL_STATE_DIR"
         echo "Running bbl destroy in $(pwd)"
-        bbl destroy --no-confirm --state-dir .
+        
+        bbl destroy \
+          --no-confirm \
+          --state-dir . \
+          --iaas gcp \
+          --gcp-service-account-key "$GCP_KEY_FILE" \
+          --gcp-project-id "$BBL_GCP_PROJECT_ID" \
+          --gcp-zone "$BBL_GCP_ZONE" \
+          --gcp-region "$BBL_GCP_REGION"
+        
         popd
         
         echo "Environment destroyed successfully"
@@ -101,10 +128,14 @@ runs:
       run: |
         set -euo pipefail
         ENV_DIR="bbl-state/${{ inputs.env_name }}"
-        rm -f "$ENV_DIR/gcp-key.json" || true
-        rm -f "$ENV_DIR/lb-cert.pem" || true
-        rm -f "$ENV_DIR/lb-key.pem" || true
-        rm -f gcp-key.json || true  
+        
+        find "$ENV_DIR" -type f \( \
+          -name "*.pem" -o \
+          -name "*.key" -o \
+          -name "private_key" -o \
+          -name "id_rsa*" \
+        \) -delete 2>/dev/null || true
+        
         echo "Cleaned up sensitive files in $ENV_DIR"
 
     - name: Commit and push BBL state
@@ -124,7 +155,6 @@ runs:
           git push origin ${{ inputs.bbl_state_branch }}
           echo "BBL state changes committed and pushed"
         else
-          echo "No BBL state changes to commit."
+          echo "No BBL state changes to commit"
         fi
         popd
-
