@@ -60,17 +60,28 @@ runs:
           exit 1
         fi
         
+        echo "OIDC credentials file found: ${GOOGLE_APPLICATION_CREDENTIALS}"
+        
         TEMP_DIR=$(mktemp -d)
         chmod 700 "$TEMP_DIR"
         
-        SA_EMAIL=$(gcloud config get-value account 2>/dev/null || gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -1)
+        SA_EMAIL=$(jq -r '.service_account_impersonation_url // .client_email // empty' "${GOOGLE_APPLICATION_CREDENTIALS}" | sed 's|.*/||' | sed 's|:.*||')
+        
+        if [[ -z "$SA_EMAIL" ]]; then
+          echo "Service account not found in JSON, attempting gcloud authentication..."
+          gcloud auth login --cred-file="${GOOGLE_APPLICATION_CREDENTIALS}" --quiet 2>/dev/null || true
+          SA_EMAIL=$(gcloud config get-value account 2>/dev/null || gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -1)
+        fi
         
         if [[ -z "$SA_EMAIL" ]]; then
           echo "ERROR: Could not determine service account email"
+          echo "OIDC credentials content (masked sensitive data):"
+          jq 'del(.token, .private_key, .private_key_id)' "${GOOGLE_APPLICATION_CREDENTIALS}"
           exit 1
         fi
         
         echo "Service Account: $SA_EMAIL"
+        echo "Project ID: ${{ inputs.gcp_project_id }}"
         
         cat > "$TEMP_DIR/bbl-gcp-key.json" <<EOF
         {
@@ -92,6 +103,8 @@ runs:
         
         echo "GCP_KEY_FILE=$TEMP_DIR/bbl-gcp-key.json" >> "$GITHUB_OUTPUT"
         echo "TEMP_DIR=$TEMP_DIR" >> "$GITHUB_OUTPUT"
+        
+        echo "Created BBL-compatible credentials file with OIDC backend"
 
     - name: Destroy environment
       id: destroy
