@@ -66,22 +66,49 @@ runs:
         unzip -q /tmp/terraform.zip -d /tmp/
         sudo mv /tmp/{bbl,terraform,bosh} /usr/local/bin/
 
+    - name: Create BBL-compatible credentials
+      shell: bash
+      run: |
+        TEMP_DIR=$(mktemp -d)
+        echo "TEMP_DIR=$TEMP_DIR" >> $GITHUB_ENV
+        
+        SA_EMAIL=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
+        
+        cat > "$TEMP_DIR/gcp-key.json" <<EOF
+        {
+          "type": "service_account",
+          "project_id": "${{ inputs.gcp_project_id }}",
+          "private_key_id": "oidc-key",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nOIDC\n-----END PRIVATE KEY-----",
+          "client_email": "$SA_EMAIL",
+          "client_id": "oidc-client",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs"
+        }
+        EOF
+        
+        echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
+        echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
+
     - name: Run BBL Up
       id: bbl-up
       shell: bash
       run: |
         set -euo pipefail
         
-        TEMP_DIR=$(mktemp -d)
-        trap "rm -rf $TEMP_DIR" EXIT
-        
-        echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
-        echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
-        
         mkdir -p bbl-state/${{ inputs.env_name }}
         cd bbl-state/${{ inputs.env_name }}
         
-        export BBL_GCP_SERVICE_ACCOUNT_KEY="${GOOGLE_APPLICATION_CREDENTIALS}"
+        mkdir -p terraform
+        cat > terraform/oidc_override.tf <<'EOF'
+        provider "google" {
+          project = var.project_id
+          region  = var.region
+        }
+        EOF
+        
+        export BBL_GCP_SERVICE_ACCOUNT_KEY="$TEMP_DIR/gcp-key.json"
         export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
         export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
         export BBL_GCP_REGION="${{ inputs.gcp_region }}"
@@ -118,3 +145,9 @@ runs:
           git commit -m "Update BBL state: ${{ inputs.env_name }}"
           git push origin ${{ inputs.bbl_state_branch }}
         }
+
+    - name: Cleanup
+      if: always()
+      shell: bash
+      run: |
+        rm -rf "$TEMP_DIR"
