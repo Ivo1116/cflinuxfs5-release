@@ -1,5 +1,5 @@
 name: 'BBL Up'
-description: 'Set up test environment using BBL with OIDC authentication'
+description: 'Set up test environment using BBL'
 
 inputs:
   stack:
@@ -10,19 +10,23 @@ inputs:
     required: true
   env_name:
     description: 'Environment name'
-    required: true
+    required: false
+    default: 'cflinuxfs5-test'
   gcp_project_id:
     description: 'GCP Project ID'
     required: true
   gcp_zone:
     description: 'GCP Zone'
-    required: true
+    required: false
+    default: 'us-central1-a'
   gcp_region:
     description: 'GCP Region'
-    required: true
+    required: false
+    default: 'us-central1'
   lb_domain:
     description: 'Load balancer domain'
-    required: true
+    required: false
+    default: 'sisle.org'
   bbl_state_repo:
     description: 'Repo for BBL state (owner/repo)'
     required: true
@@ -30,15 +34,6 @@ inputs:
     description: 'Branch for BBL state'
     required: false
     default: 'main'
-  lb_cert:
-    description: 'Load balancer certificate'
-    required: true
-  lb_key:
-    description: 'Load balancer private key'
-    required: true
-  bbl_state_deploy_key:
-    description: 'SSH deploy key for BBL state repo'
-    required: true
 
 outputs:
   success:
@@ -48,111 +43,90 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - uses: actions/checkout@v4
+    - name: Checkout BBL state repo
+      uses: actions/checkout@v4
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
         path: bbl-state
-        ssh-key: ${{ inputs.bbl_state_deploy_key }}
+        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
 
-    - name: Install tools
-      shell: bash
-      run: |
-        wget -qO /tmp/bbl https://github.com/cloudfoundry/bosh-bootloader/releases/download/v9.0.36/bbl-v9.0.36_linux_amd64
-        wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
-        wget -qO /tmp/bosh https://github.com/cloudfoundry/bosh-cli/releases/download/v7.4.0/bosh-cli-7.4.0-linux-amd64
-        
-        chmod +x /tmp/bbl /tmp/bosh
-        unzip -q /tmp/terraform.zip -d /tmp/
-        sudo mv /tmp/{bbl,terraform,bosh} /usr/local/bin/
-
-    - name: Create BBL-compatible credentials
-      shell: bash
-      run: |
-        TEMP_DIR=$(mktemp -d)
-        echo "TEMP_DIR=$TEMP_DIR" >> $GITHUB_ENV
-        
-        SA_EMAIL=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null || echo "github-actions-sa@${{ inputs.gcp_project_id }}.iam.gserviceaccount.com")
-        
-        # Generate a valid RSA key for BBL validation
-        openssl genrsa -out "$TEMP_DIR/dummy.pem" 2048 2>/dev/null
-        PRIVATE_KEY=$(awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' "$TEMP_DIR/dummy.pem")
-        
-        cat > "$TEMP_DIR/gcp-key.json" <<EOF
-        {
-          "type": "service_account",
-          "project_id": "${{ inputs.gcp_project_id }}",
-          "private_key_id": "dummy-key-id",
-          "private_key": "${PRIVATE_KEY}",
-          "client_email": "${SA_EMAIL}",
-          "client_id": "000000000000000000000",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs"
-        }
-        EOF
-        
-        echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
-        echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
-
-    - name: Run BBL Up
-      id: bbl-up
+    - name: Install BBL, Terraform, BOSH CLI
       shell: bash
       run: |
         set -euo pipefail
         
+        wget -O /tmp/bbl https://github.com/Ivo1116/bosh-bootloader/releases/download/test/bbl-linux
+        chmod +x /tmp/bbl
+        sudo mv /tmp/bbl /usr/local/bin/bbl
+
+        wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+        unzip /tmp/terraform.zip -d /tmp/
+        sudo mv /tmp/terraform /usr/local/bin/terraform
+
+        wget -O /tmp/bosh https://github.com/cloudfoundry/bosh-cli/releases/download/v7.4.0/bosh-cli-7.4.0-linux-amd64
+        chmod +x /tmp/bosh
+        sudo mv /tmp/bosh /usr/local/bin/bosh
+
+    - name: Run BBL Up
+      id: bbl-up
+      shell: bash
+
+      run: |
+        set -euo pipefail
+        export PATH="/usr/local/bin:$PATH"
+
         mkdir -p bbl-state/${{ inputs.env_name }}
         cd bbl-state/${{ inputs.env_name }}
-        
-        export BBL_GCP_SERVICE_ACCOUNT_KEY="$TEMP_DIR/gcp-key.json"
+
+        printf "%s" "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-key.json
+
+        export BBL_GCP_SERVICE_ACCOUNT_KEY="$(pwd)/gcp-key.json"
         export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
         export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
         export BBL_GCP_REGION="${{ inputs.gcp_region }}"
         export BBL_IAAS=gcp
-        
-        # Generate plan first
-        bbl plan \
-          --lb-type cf \
-          --lb-cert "$TEMP_DIR/lb-cert.pem" \
-          --lb-key "$TEMP_DIR/lb-key.pem" \
-          --lb-domain "${{ inputs.lb_domain }}"
-        
-        # Override Terraform provider to use OIDC
-        cat > terraform/oidc_override.tf <<'EOF'
-        provider "google" {
-          project = var.project_id
-          region  = var.region
-        }
-        EOF
-        
-        # Now run up with override in place
+
+        if [[ -n "${CFLINUXFS5_LB_CERT:-}" && -n "${CFLINUXFS5_LB_KEY:-}" ]]; then
+          printf "%s" "${CFLINUXFS5_LB_CERT}" > lb-cert.pem
+          printf "%s" "${CFLINUXFS5_LB_KEY}" > lb-key.pem
+          export BBL_LB_CERT="$(pwd)/lb-cert.pem"
+          export BBL_LB_KEY="$(pwd)/lb-key.pem"
+        fi
+
+        if [[ -n "${{ inputs.lb_domain }}" ]]; then
+          export LB_DOMAIN="${{ inputs.lb_domain }}"
+        fi
+
         bbl up \
           --terraform-binary /usr/local/bin/terraform \
-          --lb-domain "${{ inputs.lb_domain }}"
-        
+          --lb-type cf \
+          ${BBL_LB_CERT:+--lb-cert "$BBL_LB_CERT"} \
+          ${BBL_LB_KEY:+--lb-key "$BBL_LB_KEY"} \
+          ${LB_DOMAIN:+--lb-domain "$LB_DOMAIN"}
+
         echo "success=true" >> "$GITHUB_OUTPUT"
 
-    - name: Save state
+    - name: Commit and push BBL state
       shell: bash
       run: |
+        set -euo pipefail
         cd bbl-state
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
+        git config user.name "CF Buildpacks Eng Bot"
+        git config user.email "tanzu-buildpacks.pdl@broadcom.com"
         
-        cat >> .gitignore <<EOF
-        **/*.pem
-        **/*.key
-        **/gcp-key.json
-        **/*-key.json
-        EOF
+        echo "*/gcp-key.json" >> .gitignore
+        echo "*/service-account-key.json" >> .gitignore
+        echo "*/*-key.json" >> .gitignore
+        echo "*/*.key" >> .gitignore
+        echo "*/*.pem" >> .gitignore
+        echo "*/private_key" >> .gitignore
+        echo "*/id_rsa*" >> .gitignore
         
-        git add -A
-        git diff --staged --quiet || {
-          git commit -m "Update BBL state: ${{ inputs.env_name }}"
+        if [[ -n "$(git status --porcelain)" ]]; then
+          git add -A
+          git commit -m "Update BBL state for ${{ inputs.env_name }}"
           git push origin ${{ inputs.bbl_state_branch }}
-        }
-
-    - name: Cleanup
-      if: always()
-      shell: bash
-      run: rm -rf "$TEMP_DIR"
+        else
+          echo "No BBL state changes to commit."
+        fi
