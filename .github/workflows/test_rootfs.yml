@@ -170,12 +170,6 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
-
       - name: Run CATs
         id: cats
         uses: ./.github/actions/run-cats
@@ -224,12 +218,6 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
-
       - name: Cleanup deployments
         uses: ./.github/actions/cleanup-deployments
         with:
@@ -237,6 +225,10 @@ jobs:
           bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
+        env:
+          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          CFLINUXFS5_LB_CERT: ${{ secrets.CFLINUXFS5_LB_CERT }}
+          CFLINUXFS5_LB_KEY: ${{ secrets.CFLINUXFS5_LB_KEY }}
 
   destroy-test-environment:
     name: Destroy Test Environment
@@ -249,12 +241,6 @@ jobs:
       - name: Checkout self
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          service_account: 'github-actions-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
-
       - name: Destroy test environment
         uses: ./.github/actions/bbl-destroy
         with:
@@ -265,6 +251,10 @@ jobs:
           gcp_zone: ${{ env.GCP_ZONE }}
           gcp_region: ${{ env.GCP_REGION }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
+        env:
+          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          CFLINUXFS5_LB_CERT: ${{ secrets.CFLINUXFS5_LB_CERT }}
+          CFLINUXFS5_LB_KEY: ${{ secrets.CFLINUXFS5_LB_KEY }}
 
   trigger-release-workflow:
     name: Trigger Release Workflow

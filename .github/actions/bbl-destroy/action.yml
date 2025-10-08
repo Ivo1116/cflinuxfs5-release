@@ -10,25 +10,19 @@ inputs:
     required: true
   bbl_state_branch:
     description: 'Branch of the bbl state repo'
-    required: false
-    default: 'main'
-  bbl_state_deploy_key:
-    description: 'SSH deploy key for BBL state repo'
     required: true
+    default: main
   gcp_project_id:
     description: 'GCP project ID'
     required: true
   gcp_zone:
     description: 'GCP Zone'
-    required: true
+    required: false
+    default: 'us-central1-a'
   gcp_region:
     description: 'GCP Region'
-    required: true
-
-outputs:
-  success:
-    description: 'Whether destroy succeeded (true if no-op or completed)'
-    value: ${{ steps.destroy.outputs.success }}
+    required: false
+    default: 'us-central1'
 
 runs:
   using: 'composite'
@@ -38,7 +32,7 @@ runs:
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
-        ssh-key: ${{ inputs.bbl_state_deploy_key }}
+        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
         path: bbl-state
 
     - name: Setup tools (bbl)
@@ -49,140 +43,44 @@ runs:
         chmod +x /tmp/bbl
         sudo mv /tmp/bbl /usr/local/bin/bbl
 
-    - name: Create BBL-compatible GCP credentials from OIDC
-      id: gcp-creds
-      shell: bash
-      run: |
-        set -euo pipefail
-        
-        if [[ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] || [[ ! -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
-          echo "ERROR: GOOGLE_APPLICATION_CREDENTIALS not set or file doesn't exist"
-          exit 1
-        fi
-        
-        echo "OIDC credentials file found: ${GOOGLE_APPLICATION_CREDENTIALS}"
-        
-        TEMP_DIR=$(mktemp -d)
-        chmod 700 "$TEMP_DIR"
-        
-        SA_EMAIL=$(jq -r '.service_account_impersonation_url // .client_email // empty' "${GOOGLE_APPLICATION_CREDENTIALS}" | sed 's|.*/||' | sed 's|:.*||')
-        
-        if [[ -z "$SA_EMAIL" ]]; then
-          echo "Service account not found in JSON, attempting gcloud authentication..."
-          gcloud auth login --cred-file="${GOOGLE_APPLICATION_CREDENTIALS}" --quiet 2>/dev/null || true
-          SA_EMAIL=$(gcloud config get-value account 2>/dev/null || gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -1)
-        fi
-        
-        if [[ -z "$SA_EMAIL" ]]; then
-          echo "ERROR: Could not determine service account email"
-          echo "OIDC credentials content (masked sensitive data):"
-          jq 'del(.token, .private_key, .private_key_id)' "${GOOGLE_APPLICATION_CREDENTIALS}"
-          exit 1
-        fi
-        
-        echo "Service Account: $SA_EMAIL"
-        echo "Project ID: ${{ inputs.gcp_project_id }}"
-        
-        cat > "$TEMP_DIR/bbl-gcp-key.json" <<EOF
-        {
-          "type": "service_account",
-          "project_id": "${{ inputs.gcp_project_id }}",
-          "private_key_id": "oidc-key",
-          "private_key": "-----BEGIN PRIVATE KEY-----\nOIDC\n-----END PRIVATE KEY-----\n",
-          "client_email": "$SA_EMAIL",
-          "client_id": "oidc-client",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-          "universe_domain": "googleapis.com"
-        }
-        EOF
-        
-        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
-        echo "GOOGLE_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}" >> "$GITHUB_ENV"
-        
-        echo "GCP_KEY_FILE=$TEMP_DIR/bbl-gcp-key.json" >> "$GITHUB_OUTPUT"
-        echo "TEMP_DIR=$TEMP_DIR" >> "$GITHUB_OUTPUT"
-        
-        echo "Created BBL-compatible credentials file with OIDC backend"
-
     - name: Destroy environment
-      id: destroy
       shell: bash
       run: |
         set -euo pipefail
         BBL_STATE_DIR="bbl-state/${{ inputs.env_name }}"
-        
-        echo "Checking for BBL state dir: $BBL_STATE_DIR"
-        
+        GCP_SERVICE_ACCOUNT_KEY="${{env.GCP_SERVICE_ACCOUNT_KEY }}"
+
         if [[ ! -d "$BBL_STATE_DIR" ]]; then
           echo "BBL state directory not found: $BBL_STATE_DIR"
           echo "Nothing to destroy"
-          echo "success=true" >> $GITHUB_OUTPUT
           exit 0
         fi
         
-        echo "State dir found. Proceeding with destroy..."
-        
-        GCP_KEY_FILE="${{ steps.gcp-creds.outputs.GCP_KEY_FILE }}"
-        
-        if [[ ! -f "$GCP_KEY_FILE" ]]; then
-          echo "ERROR: GCP key file not found: $GCP_KEY_FILE"
-          exit 1
-        fi
-        
+        cd "$BBL_STATE_DIR"
+
+        printf "%s" "${GCP_SERVICE_ACCOUNT_KEY}" > gcp-key.json
+        export BBL_GCP_SERVICE_ACCOUNT_KEY="$(pwd)/gcp-key.json"
         export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
         export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
         export BBL_GCP_REGION="${{ inputs.gcp_region }}"
         export BBL_IAAS=gcp
-        export GOOGLE_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}"
-        
-        pushd "$BBL_STATE_DIR"
-        echo "Running bbl destroy in $(pwd)"
-        
-        bbl destroy \
-          --no-confirm \
-          --state-dir . \
-          --iaas gcp \
-          --gcp-service-account-key "$GCP_KEY_FILE" \
-          --gcp-project-id "$BBL_GCP_PROJECT_ID" \
-          --gcp-zone "$BBL_GCP_ZONE" \
-          --gcp-region "$BBL_GCP_REGION"
-        
-        popd
-        
-        echo "Environment destroyed successfully"
-        echo "success=true" >> $GITHUB_OUTPUT
 
-    - name: Cleanup sensitive files
-      if: always()
-      shell: bash
-      run: |
-        set +e
-        
-        if [[ -n "${{ steps.gcp-creds.outputs.TEMP_DIR }}" ]]; then
-          rm -rf "${{ steps.gcp-creds.outputs.TEMP_DIR }}"
-        fi
-        
-        echo "Cleanup completed"
+        bbl destroy --no-confirm --state-dir "$BBL_STATE_DIR"
+        echo "Environment destroyed successfully"
 
     - name: Commit and push BBL state
       if: always()
       shell: bash
       run: |
         set -euo pipefail
-        STATE_REPO_DIR="bbl-state"
-        
-        pushd "$STATE_REPO_DIR"
+        cd bbl-state
         git config user.name "CF Buildpacks Eng Bot"
         git config user.email "test@test.com"
         
         if [[ -n "$(git status --porcelain)" ]]; then
           git add -A
-          git commit -m "Clean up bbl state dir for ${{ inputs.env_name }} after destroy"
+          git commit -m "Clean up bbl state dir for ${{ inputs.env_name }}"
           git push origin ${{ inputs.bbl_state_branch }}
-          echo "BBL state changes committed and pushed"
         else
-          echo "No BBL state changes to commit"
+          echo "No BBL state changes to commit."
         fi
-        popd
