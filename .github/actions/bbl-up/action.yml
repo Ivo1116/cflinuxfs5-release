@@ -103,7 +103,6 @@ runs:
 
         bbl up \
           --terraform-binary /usr/local/bin/terraform \
-          --debug \
           --lb-type cf \
           ${BBL_LB_CERT:+--lb-cert "$BBL_LB_CERT"} \
           ${BBL_LB_KEY:+--lb-key "$BBL_LB_KEY"} \
