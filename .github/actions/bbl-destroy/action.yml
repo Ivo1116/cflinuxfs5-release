@@ -23,6 +23,9 @@ inputs:
     description: 'GCP Region'
     required: false
     default: 'us-central1'
+  bbl_state_deploy_key:
+    description: 'Deploy key for BBL state'
+    required: true
 
 runs:
   using: 'composite'
@@ -32,7 +35,7 @@ runs:
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
-        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.bbl_state_deploy_key }}
         path: bbl-state
 
     - name: Setup tools (bbl)

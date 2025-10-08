@@ -34,6 +34,9 @@ inputs:
     description: 'Branch for BBL state'
     required: false
     default: 'main'
+  bbl_state_deploy_key:
+    description: 'Deploy key for BBL state'
+    required: true
 
 outputs:
   success:
@@ -49,7 +52,7 @@ runs:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
         path: bbl-state
-        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
+        ssh-key: ${{ inputs.bbl_state_deploy_key }}
 
     - name: Install BBL, Terraform, BOSH CLI
       shell: bash
