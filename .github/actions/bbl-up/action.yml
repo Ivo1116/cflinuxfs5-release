@@ -66,46 +66,36 @@ runs:
         unzip -q /tmp/terraform.zip -d /tmp/
         sudo mv /tmp/{bbl,terraform,bosh} /usr/local/bin/
 
-    - name: Run BBL
+    - name: Run BBL Up
       id: bbl-up
       shell: bash
       run: |
+        set -euo pipefail
+        
         TEMP_DIR=$(mktemp -d)
         trap "rm -rf $TEMP_DIR" EXIT
         
-        echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/cert.pem"
-        echo "${{ inputs.lb_key }}" > "$TEMP_DIR/key.pem"
+        echo "${{ inputs.lb_cert }}" > "$TEMP_DIR/lb-cert.pem"
+        echo "${{ inputs.lb_key }}" > "$TEMP_DIR/lb-key.pem"
         
         mkdir -p bbl-state/${{ inputs.env_name }}
         cd bbl-state/${{ inputs.env_name }}
         
-        # Generate plan with dummy key (BBL requires it)
-        openssl genrsa -out "$TEMP_DIR/dummy.pem" 2048 2>/dev/null
-        cat > "$TEMP_DIR/dummy-key.json" <<EOF
-        {
-          "type": "service_account",
-          "project_id": "${{ inputs.gcp_project_id }}",
-          "private_key": "$(awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' $TEMP_DIR/dummy.pem)",
-          "client_email": "dummy@${{ inputs.gcp_project_id }}.iam.gserviceaccount.com"
-        }
-        EOF
+        export BBL_GCP_SERVICE_ACCOUNT_KEY="${GOOGLE_APPLICATION_CREDENTIALS}"
+        export BBL_GCP_PROJECT_ID="${{ inputs.gcp_project_id }}"
+        export BBL_GCP_ZONE="${{ inputs.gcp_zone }}"
+        export BBL_GCP_REGION="${{ inputs.gcp_region }}"
+        export BBL_IAAS=gcp
+        export BBL_LB_CERT="$TEMP_DIR/lb-cert.pem"
+        export BBL_LB_KEY="$TEMP_DIR/lb-key.pem"
+        export LB_DOMAIN="${{ inputs.lb_domain }}"
         
-        bbl plan \
-          --iaas gcp \
-          --gcp-service-account-key "$TEMP_DIR/dummy-key.json" \
-          --gcp-project-id "${{ inputs.gcp_project_id }}" \
-          --gcp-zone "${{ inputs.gcp_zone }}" \
-          --gcp-region "${{ inputs.gcp_region }}" \
+        bbl up \
+          --terraform-binary /usr/local/bin/terraform \
           --lb-type cf \
-          --lb-cert "$TEMP_DIR/cert.pem" \
-          --lb-key "$TEMP_DIR/key.pem" \
-          --lb-domain "${{ inputs.lb_domain }}"
-        
-        # Override Terraform to use OIDC
-        echo 'provider "google" {}' > terraform/oidc_override.tf
-        
-        # Run with OIDC credentials
-        bbl up --lb-domain "${{ inputs.lb_domain }}"
+          --lb-cert "$BBL_LB_CERT" \
+          --lb-key "$BBL_LB_KEY" \
+          --lb-domain "$LB_DOMAIN"
         
         echo "success=true" >> "$GITHUB_OUTPUT"
 
@@ -119,8 +109,7 @@ runs:
         cat >> .gitignore <<EOF
         **/*.pem
         **/*.key
-        **/vars/*
-        **/creds.yml
+        **/gcp-key.json
         **/*-key.json
         EOF
         
