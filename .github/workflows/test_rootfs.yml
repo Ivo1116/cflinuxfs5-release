@@ -21,7 +21,7 @@ on:
         description: 'Skip Deploy CF'
         type: boolean
         default: true
-      skip_cats: 
+      skip_cats:
         description: 'Skip Cloud Foundry Acceptance Tests'
         type: boolean
         default: false
@@ -118,7 +118,10 @@ jobs:
     name: Deploy CF with New Rootfs
     needs: [setup-test-environment, resolve-inputs]
     runs-on: ubuntu-latest
-    if: always() && (needs.resolve-inputs.outputs.skip_deploy != 'true' || needs.setup-test-environment.result == 'success')
+    if: |
+      always() && 
+      needs.resolve-inputs.outputs.skip_deploy != 'true' && 
+      (needs.resolve-inputs.outputs.skip_setup == 'true' || needs.setup-test-environment.result == 'success')
     outputs:
       deployment_ready: ${{ steps.deploy.outputs.success }}
       version: ${{ needs.resolve-inputs.outputs.version }}
@@ -182,10 +185,8 @@ jobs:
     needs: [run-cats, resolve-inputs]
     runs-on: ubuntu-latest
     if: |
-      always() && (
-        needs.resolve-inputs.outputs.skip_deploy == 'true' ||
-        needs.deploy-cf.result == 'success'
-      )
+      always() && 
+      (needs.resolve-inputs.outputs.skip_cats == 'true' || needs.run-cats.outputs.cats_passed == 'true')
     outputs:
       race_check_passed: ${{ steps.race-check.outputs.success }}
     steps:
@@ -257,11 +258,7 @@ jobs:
     if: |
       always() && 
       needs.check-race-condition.outputs.race_check_passed == 'true' &&
-      (
-        needs.resolve-inputs.outputs.skip_cats == 'true' ||
-        needs.run-cats.outputs.cats_passed == 'true'||
-        true 
-      )
+      (needs.resolve-inputs.outputs.skip_cats == 'true' || needs.run-cats.outputs.cats_passed == 'true')
     steps:
       - name: Checkout self
         uses: actions/checkout@v4
