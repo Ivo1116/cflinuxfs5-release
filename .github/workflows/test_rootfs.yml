@@ -12,15 +12,15 @@ on:
       skip_cleanup:
         description: 'Skip infrastructure cleanup'
         type: boolean
-        default: true
+        default: false
       skip_setup:
         description: 'Skip setup test environment'
         type: boolean
-        default: true
+        default: false
       skip_deploy:
         description: 'Skip Deploy CF'
         type: boolean
-        default: true
+        default: false
       skip_cats:
         description: 'Skip Cloud Foundry Acceptance Tests'
         type: boolean

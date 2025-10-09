@@ -111,6 +111,8 @@ runs:
         echo "*/*.pem" >> .gitignore
         echo "*/private_key" >> .gitignore
         echo "*/id_rsa*" >> .gitignore
+
+        rm -rf "${{ inputs.env_name }}"
         
         if [[ -n "$(git status --porcelain)" ]]; then
           git add -A
