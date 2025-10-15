@@ -32,7 +32,7 @@ env:
   RELEASE_REPO: ivo1116/cflinuxfs5-release
   BUCKET_NAME: cflinuxfs5test
   DEFAULT_BRANCH: main
-  BUILDPACKS_ENVS_REPO: ivo1116/buildpacks-envs
+  BUILDPACKS_ENVS_REPO: Ivo1116/buildpacks-envs
   OPS_FILE_REPO: ivo1116/test
   OPS_FILE: use-cflinuxfs5.yml
   AWS_REGION: us-east-1
