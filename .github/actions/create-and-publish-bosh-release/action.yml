@@ -26,6 +26,9 @@ inputs:
   go_version:
     description: 'Go version'
     required: true
+  aws_region:
+    description: 'S3 bucket AWS region'
+    required: true
   owner:
     description: 'Repository owner'
     required: true
@@ -81,6 +84,7 @@ runs:
         release_name: ${{ inputs.stack }}-release
         release_repo: ${{ inputs.owner }}/${{ inputs.release_repo }}
         go_version: ${{ inputs.go_version }}
+        aws_region: ${{ inputs.aws_region }}
         final: true
 
     - name: Upload BOSH release to S3
@@ -89,6 +93,7 @@ runs:
         upload_type: release
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
+        stack: ${{ inputs.stack }}
         file: rootfs-artifacts/${{ inputs.stack }}-release-${{ inputs.version }}.tgz
 
     - name: Create BOSH release notes

@@ -12,6 +12,9 @@ inputs:
     description: 'Previous version'
     required: false
     default: ''
+  bucket_name:
+    description: 'Name of the S3 bucket'
+    required: true
 
 outputs:
   diff_path:
@@ -34,7 +37,7 @@ runs:
       with:
         stack: ${{ inputs.stack }}
         version: ${{ inputs.previous_version }}
-        bucket_name: ${{ vars.BUCKET_NAME }}
+        bucket_name: ${{ inputs.bucket_name }}
         artifact_type: receipt
       continue-on-error: true
 

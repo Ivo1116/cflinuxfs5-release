@@ -93,6 +93,7 @@ runs:
       uses: ./.github/actions/upload-s3
       with:
         upload_type: stack
+        stack: ${{ inputs.stack }}
         version: ${{ inputs.final_version }}
         bucket_name: ${{ inputs.bucket_name }}
 
@@ -100,5 +101,6 @@ runs:
       uses: ./.github/actions/upload-s3
       with:
         upload_type: receipt
+        stack: ${{ inputs.stack }}
         version: ${{ inputs.final_version }}
         bucket_name: ${{ inputs.bucket_name }}

@@ -1,5 +1,5 @@
 name: 'Upload to S3'
-description: 'Upload artifacts to S3 - equivalent to Concourse upload-s3 task'
+description: 'Upload artifacts to S3'
 
 inputs:
   upload_type:
@@ -14,6 +14,9 @@ inputs:
   file:
     description: 'Optional: explicit file path to upload (used for release-s3)'
     required: false
+  stack:
+    description: 'Name of the stack'
+    required: true
 
 runs:
   using: 'composite'
@@ -23,7 +26,7 @@ runs:
       run: |
         set -euo pipefail
 
-        STACK="${{ vars.STACK }}"
+        STACK="${{ inputs.stack }}"
         VERSION="${{ inputs.version }}"
         UPLOAD_TYPE="${{ inputs.upload_type }}"
         BUCKET="${{ inputs.bucket_name }}"
@@ -86,7 +89,7 @@ runs:
       run: |
         set -euo pipefail
         
-        STACK="${{ vars.STACK }}"
+        STACK="${{ inputs.stack }}"
         VERSION="${{ inputs.version }}"
         UPLOAD_TYPE="${{ inputs.upload_type }}"
         BUCKET="${{ inputs.bucket_name }}"

@@ -64,6 +64,7 @@ runs:
         stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
         previous_version: ${{ inputs.previous_version }}
+        bucket_name: ${{ inputs.bucket_name }}
 
     - name: Build cflinuxfs BOSH release
       uses: ./.github/actions/create-bosh-release
@@ -75,12 +76,14 @@ runs:
         release_repo: ${{ inputs.release_repo }}
         release_deploy_key:  ${{ inputs.release_deploy_key }}
         go_version: ${{ inputs.go_version }}
+        aws_region: ${{ inputs.aws_region }}
         final: false
 
     - name: Upload stack to S3
       uses: ./.github/actions/upload-s3
       with:
         upload_type: stack
+        stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
 
@@ -88,6 +91,7 @@ runs:
       uses: ./.github/actions/upload-s3
       with:
         upload_type: receipt
+        stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
 
@@ -95,6 +99,7 @@ runs:
       uses: ./.github/actions/upload-s3
       with:
         upload_type: release
+        stack: ${{ inputs.stack }}
         version: ${{ inputs.version }}
         bucket_name: ${{ inputs.bucket_name }}
         file: rootfs-artifacts/${{ inputs.stack }}-release-${{ inputs.version }}.tgz
