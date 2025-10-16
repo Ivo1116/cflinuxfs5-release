@@ -26,10 +26,6 @@ on:
         type: boolean
         default: false
 
-env:
-  GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPMb9xqMjZzIYWRiCJq976v5K8O0FDln4djspB
-
-
 permissions:
   contents: write
   actions: write
@@ -160,7 +156,6 @@ jobs:
         with:
           bbl_state_repo: ${{ vars.BUILDPACKS_ENVS_REPO }}
           bbl_state_branch: ${{ vars.DEFAULT_BRANCH }}
-          go_buildpack_path: ${{ vars.GO_BUILDPACK_PATH }}
           system_domain: ${{ vars.SYSTEM_DOMAIN }}
           env_name: ${{ vars.STACK }}
           nodes: 4
