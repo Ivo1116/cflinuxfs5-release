@@ -11,6 +11,9 @@ inputs:
   tag:
     description: 'Git tag to create (final version)'
     required: true
+  stack:
+    description: 'cflinuxfs stack'
+    required: true
   git_user_name:
     description: 'Git user.name for commit'
     required: true
@@ -27,6 +30,7 @@ runs:
         set -euo pipefail
         repo="${{ inputs.repo_dir }}"
         receipt="${{ inputs.receipt_path }}"
+        STACK="${{ inputs.stack }}"
         
         test -d "$repo/.git" || { echo "Invalid repo dir"; exit 1; }
         test -f "$receipt" || { echo "Missing receipt $receipt"; exit 1; }
