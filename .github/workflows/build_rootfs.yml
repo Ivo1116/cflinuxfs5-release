@@ -12,20 +12,6 @@ on:
   repository_dispatch:
     types: [cve-update, golang-update, rootfs-change]
 
-env:
-  STACK: cflinuxfs5
-  ROOTFS_REPO: ivo1116/cflinuxfs5
-  RELEASE_REPO: ivo1116/cflinuxfs5-release
-  BUCKET_NAME: cflinuxfs5test
-  DEFAULT_BRANCH: main
-  AWS_REGION: us-east-1
-  BUILDPACKS_CI_REPO: ivo1116/buildpacks-ci
-  GOLANG_RELEASE_REPO: cloudfoundry/bosh-package-golang-release
-  CVE_UBUNTU_VERSION: Ubuntu 24.04
-  CVE_UBUNTU_CODENAME: ubuntu24.04
-  GOLANG_VERSION: 1.24.6
-  VERSION_FORMAT: minor
-
 permissions:
   contents: write
   actions: write
@@ -50,12 +36,12 @@ jobs:
         id: cve-check
         uses: ./.github/actions/check-rootfs-cves
         with:
-          stack: ${{ env.STACK }}
-          ubuntu_version: ${{ env.CVE_UBUNTU_VERSION }}
-          ubuntu_codename: ${{ env.CVE_UBUNTU_CODENAME }}
-          buildpacks_ci_repo: ${{ env.BUILDPACKS_CI_REPO }}
+          stack: ${{ vars.STACK }}
+          ubuntu_version: ${{ vars.CVE_UBUNTU_VERSION }}
+          ubuntu_codename: ${{ vars.CVE_UBUNTU_CODENAME }}
+          buildpacks_ci_repo: ${{ vars.BUILDPACKS_CI_REPO }}
           cves_repo_path: new-cves
-          rootfs_repo: ${{ env.ROOTFS_REPO }}
+          rootfs_repo: ${{ vars.ROOTFS_REPO }}
           cflinuxfs_deploy_key: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
 
   bump-golang-package:
@@ -71,27 +57,27 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
         
       - name: Bump Golang Package
         id: golang-bump
         uses: ./.github/actions/bump-golang-package
         with:
-          git_user_name: ${{ env.STACK }}-bot
-          git_user_email: ${{ env.STACK }}-bot@test.com
+          git_user_name: ${{ vars.STACK }}-bot
+          git_user_email: ${{ vars.STACK }}-bot@test.com
           packages: '["golang-1-linux"]'
           private_yml: |
             blobstore:
               provider: s3
               options:
-                bucket_name: ${{ env.BUCKET_NAME }}
+                bucket_name: ${{ vars.BUCKET_NAME }}
                 prefix: bosh-blobs
-                region: ${{ env.AWS_REGION }}
+                region: ${{ vars.AWS_REGION }}
                 credentials_source: env_or_profile
-          cflinuxfs_release_repo: ${{ env.RELEASE_REPO }}
-          cflinuxfs_release_ref: ${{ env.DEFAULT_BRANCH }}
-          golang_release_repo: ${{ env.GOLANG_RELEASE_REPO }}
-          golang_release_ref: ${{ env.DEFAULT_BRANCH }}
+          cflinuxfs_release_repo: ${{ vars.RELEASE_REPO }}
+          cflinuxfs_release_ref: ${{ vars.DEFAULT_BRANCH }}
+          golang_release_repo: ${{ vars.GOLANG_RELEASE_REPO }}
+          golang_release_ref: ${{ vars.DEFAULT_BRANCH }}
           release_deploy_key: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 
   determine-build-needed:
@@ -140,14 +126,14 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           owner: ${{ github.repository_owner }}
-          repo: ${{ env.STACK }}
+          repo: ${{ vars.STACK }}
 
       - name: Generate version
         id: version
         uses: ./.github/actions/generate-version
         with:
           previous_tag: ${{ steps.previous-release.outputs.tag }}
-          version_format: ${{ env.VERSION_FORMAT }}
+          version_format: ${{ vars.VERSION_FORMAT }}
 
   build-and-process:
     name: Build and Process Rootfs
@@ -162,18 +148,18 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Build rootfs and process artifacts
         uses: ./.github/actions/build-and-process-rootfs
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           version: ${{ needs.gather-resources.outputs.version }}
           previous_version: ${{ needs.gather-resources.outputs.previous-version }}
-          bucket_name: ${{ env.BUCKET_NAME }}
-          release_repo: ${{ env.RELEASE_REPO }}
-          cflinuxfs_repo: ${{ env.ROOTFS_REPO }}
-          go_version: ${{ env.GOLANG_VERSION }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
+          release_repo: ${{ vars.RELEASE_REPO }}
+          cflinuxfs_repo: ${{ vars.ROOTFS_REPO }}
+          go_version: ${{ vars.GOLANG_VERSION }}
           cflinuxfs_deploy_key: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
           release_deploy_key: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 

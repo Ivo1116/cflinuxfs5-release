@@ -37,7 +37,7 @@ runs:
       with:
         repository: ${{ inputs.bbl_state_repo }}
         ref: ${{ inputs.bbl_state_branch }}
-        ssh-key: ${{ env.BBL_STATE_DEPLOY_KEY }}
+        ssh-key: ${{ vars.BBL_STATE_DEPLOY_KEY }}
         path: bbl-state
         persist-credentials: false
 

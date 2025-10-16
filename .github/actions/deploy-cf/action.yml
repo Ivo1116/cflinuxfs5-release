@@ -107,7 +107,7 @@ runs:
         eval "$(bbl print-env --state-dir $BBL_STATE_DIR)"
         bosh upload-release rootfs-artifacts/${STACK}-release-${VERSION}.tgz
 
-    - name: Deploy CF with ${{ env.STACK }}
+    - name: Deploy CF with the new rootfs
       id: deploy
       shell: bash
       run: |

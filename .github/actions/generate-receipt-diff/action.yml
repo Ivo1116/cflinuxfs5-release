@@ -34,7 +34,7 @@ runs:
       with:
         stack: ${{ inputs.stack }}
         version: ${{ inputs.previous_version }}
-        bucket_name: ${{ env.BUCKET_NAME }}
+        bucket_name: ${{ vars.BUCKET_NAME }}
         artifact_type: receipt
       continue-on-error: true
 

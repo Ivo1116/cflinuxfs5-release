@@ -48,7 +48,7 @@ runs:
       with:
         repository: ${{ inputs.cflinuxfs_repo }}
         ref: main
-        path: ${{ env.STACK }}
+        path: ${{ inputs.stack }}
         ssh-key: ${{ inputs.cflinuxfs_deploy_key }}
 
     - name: Make rootfs

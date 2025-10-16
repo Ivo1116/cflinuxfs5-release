@@ -22,18 +22,6 @@ on:
         type: boolean
         default: false
 
-env:
-  STACK: cflinuxfs5
-  ROOTFS_REPO: ivo1116/cflinuxfs5
-  RELEASE_REPO: ivo1116/cflinuxfs5-release
-  DOCKER_IMAGE: ivo1116/cflinuxfs5
-  REPO_OWNER: ivo1116
-  BUCKET_NAME: cflinuxfs5test
-  GOLANG_VERSION: 1.24.6
-  DEFAULT_BRANCH: main
-  DOCKERHUB_USERNAME: ivo1116
-  AWS_REGION: us-east-1
-
 permissions:
   contents: write
   packages: write
@@ -92,7 +80,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           owner: ${{ github.repository_owner }}
-          repo: ${{ env.STACK }}
+          repo: ${{ vars.STACK }}
 
   release-rootfs-repo:
     name: Release Rootfs Repo
@@ -109,17 +97,17 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Release rootfs repository
         uses: ./.github/actions/release-rootfs-repo
         with:
-          rootfs_repo: ${{ env.ROOTFS_REPO }}
-          stack: ${{ env.STACK }}
+          rootfs_repo: ${{ vars.ROOTFS_REPO }}
+          stack: ${{ vars.STACK }}
           rc_version: ${{ needs.resolve-inputs.outputs.rc_version }}
           final_version: ${{ needs.resolve-inputs.outputs.final_version }}
-          bucket_name: ${{ env.BUCKET_NAME }}
-          default_branch: ${{ env.DEFAULT_BRANCH }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
+          default_branch: ${{ vars.DEFAULT_BRANCH }}
           cflinuxfs_deploy_key: ${{ secrets.CFLINUXFS5_DEPLOY_KEY }}
 
   reset-version-to-rc:
@@ -136,7 +124,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Bump to next minor rc
         id: bump
@@ -147,8 +135,8 @@ jobs:
       - name: Persist next RC to S3
         uses: ./.github/actions/update-version-s3
         with:
-          bucket_name: ${{ env.BUCKET_NAME }}
-          key: versions/stack-${{ env.STACK }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
+          key: versions/stack-${{ vars.STACK }}
           version: ${{ steps.bump.outputs.next_rc }}
 
   upload-to-github:
@@ -164,18 +152,18 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload to GitHub release
         uses: ./.github/actions/upload-to-github
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           version: ${{ needs.release-rootfs-repo.outputs.final_version }}
           previous_version: ${{ needs.resolve-inputs.outputs.previous_tag }}
-          bucket_name: ${{ env.BUCKET_NAME }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
           github_token: ${{ secrets.CFLINUXFS5_PAT }}
           owner: ${{ github.repository_owner }}
-          repo: ${{ env.STACK }}
+          repo: ${{ vars.STACK }}
           include_receipt: 'true'
 
   upload-to-docker:
@@ -191,16 +179,16 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload to Docker Hub
         uses: ./.github/actions/upload-to-docker
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           version: ${{ needs.release-rootfs-repo.outputs.final_version }}
-          bucket_name: ${{ env.BUCKET_NAME }}
-          docker_image: ${{ env.DOCKER_IMAGE }}
-          dockerhub_username: ${{ env.DOCKERHUB_USERNAME }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
+          docker_image: ${{ vars.DOCKER_IMAGE }}
+          dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   create-bosh-release:
@@ -216,29 +204,29 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Create and publish BOSH release
         uses: ./.github/actions/create-and-publish-bosh-release
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           version: ${{ needs.release-rootfs-repo.outputs.final_version }}
-          release_repo: ${{ env.STACK }}-release
-          bucket_name: ${{ env.BUCKET_NAME }}
-          default_branch: ${{ env.DEFAULT_BRANCH }}
-          git_user_name: ${{ env.STACK }}-bot
-          git_user_email: ${{ env.STACK }}-bot@test.com
+          release_repo: ${{ vars.STACK }}-release
+          bucket_name: ${{ vars.BUCKET_NAME }}
+          default_branch: ${{ vars.DEFAULT_BRANCH }}
+          git_user_name: ${{ vars.STACK }}-bot
+          git_user_email: ${{ vars.STACK }}-bot@test.com
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          go_version: ${{ env.GOLANG_VERSION }}
-          owner: ${{ env.REPO_OWNER }}
+          go_version: ${{ vars.GOLANG_VERSION }}
+          owner: ${{ vars.REPO_OWNER }}
           release_deploy_key: ${{ secrets.CFLINUXFS5_RELEASE_DEPLOY_KEY }}
 
       - name: Delete RC BOSH release artifact
         uses: ./.github/actions/delete-rc-artifacts
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           rc_version: ${{ needs.resolve-inputs.outputs.rc_version }}
-          bucket_name: ${{ env.BUCKET_NAME }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
           artifact_types: 'stack, receipt, release'
 
   summary:

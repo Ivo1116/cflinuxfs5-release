@@ -1,5 +1,5 @@
 name: 'Run CATs'
-description: 'Run Cloud Foundry Acceptance Tests (CATS) on ${ env.STACK }'
+description: 'Run Cloud Foundry Acceptance Tests (CATS)'
 
 inputs:
   bbl_state_repo:

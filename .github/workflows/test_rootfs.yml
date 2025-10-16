@@ -27,21 +27,8 @@ on:
         default: false
 
 env:
-  STACK: cflinuxfs5
-  ROOTFS_REPO: ivo1116/cflinuxfs5
-  RELEASE_REPO: ivo1116/cflinuxfs5-release
-  BUCKET_NAME: cflinuxfs5test
-  DEFAULT_BRANCH: main
-  BUILDPACKS_ENVS_REPO: Ivo1116/buildpacks-envs
-  OPS_FILE_REPO: ivo1116/test
-  OPS_FILE: use-cflinuxfs5.yml
-  AWS_REGION: us-east-1
-  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  GCP_REGION: us-central1
-  GCP_ZONE: us-central1-a
-  SYSTEM_DOMAIN: bbl.gcp.cfrt-sof.sapcloud.io
   GO_BUILDPACK_PATH: https://v96161d7o2.ufs.sh/f/mpjH2zGjR1kPMb9xqMjZzIYWRiCJq976v5K8O0FDln4djspB
-  BBL_UP_DELAY_SECONDS: 600
+
 
 permissions:
   contents: write
@@ -92,15 +79,15 @@ jobs:
         id: bbl-up
         uses: ./.github/actions/bbl-up
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           version: ${{ needs.resolve-inputs.outputs.version }}
-          env_name: ${{ env.STACK }}
-          lb_domain: ${{ env.SYSTEM_DOMAIN }}
+          env_name: ${{ vars.STACK }}
+          lb_domain: ${{ vars.SYSTEM_DOMAIN }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
-          gcp_zone: ${{ env.GCP_ZONE }}
-          gcp_region: ${{ env.GCP_REGION }}
-          bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
-          bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
+          gcp_zone: ${{ vars.GCP_ZONE }}
+          gcp_region: ${{ vars.GCP_REGION }}
+          bbl_state_repo: ${{ vars.BUILDPACKS_ENVS_REPO }}
+          bbl_state_branch: ${{ vars.DEFAULT_BRANCH }}
           lb_cert: ${{ secrets.CFLINUXFS5_LB_CERT }}
           lb_key: ${{ secrets.CFLINUXFS5_LB_KEY }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
@@ -111,8 +98,8 @@ jobs:
 
       - name: Wait after BBL up
         run: |
-          echo "Waiting ${{ env.BBL_UP_DELAY_SECONDS }} seconds for environment to stabilize..."
-          sleep ${{ env.BBL_UP_DELAY_SECONDS }}
+          echo "Waiting ${{ vars.BBL_UP_DELAY_SECONDS }} seconds for environment to stabilize..."
+          sleep ${{ vars.BBL_UP_DELAY_SECONDS }}
 
   deploy-cf:
     name: Deploy CF with New Rootfs
@@ -133,21 +120,21 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Deploy CF
         id: deploy
         uses: ./.github/actions/deploy-cf
         with:
-          stack: ${{ env.STACK }}
-          env_name: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
+          env_name: ${{ vars.STACK }}
           version: ${{ needs.resolve-inputs.outputs.version }}
-          bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
-          bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
-          system_domain: ${{ env.SYSTEM_DOMAIN }}
-          bucket_name: ${{ env.BUCKET_NAME }}
-          ops_file_repo: ${{ env.OPS_FILE_REPO }}
-          ops_file: ${{ env.OPS_FILE }}
+          bbl_state_repo: ${{ vars.BUILDPACKS_ENVS_REPO }}
+          bbl_state_branch: ${{ vars.DEFAULT_BRANCH }}
+          system_domain: ${{ vars.SYSTEM_DOMAIN }}
+          bucket_name: ${{ vars.BUCKET_NAME }}
+          ops_file_repo: ${{ vars.OPS_FILE_REPO }}
+          ops_file: ${{ vars.OPS_FILE }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
 
   run-cats:
@@ -171,11 +158,11 @@ jobs:
         id: cats
         uses: ./.github/actions/run-cats
         with:
-          bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
-          bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
-          go_buildpack_path: ${{ env.GO_BUILDPACK_PATH }}
-          system_domain: ${{ env.SYSTEM_DOMAIN }}
-          env_name: ${{ env.STACK }}
+          bbl_state_repo: ${{ vars.BUILDPACKS_ENVS_REPO }}
+          bbl_state_branch: ${{ vars.DEFAULT_BRANCH }}
+          go_buildpack_path: ${{ vars.GO_BUILDPACK_PATH }}
+          system_domain: ${{ vars.SYSTEM_DOMAIN }}
+          env_name: ${{ vars.STACK }}
           nodes: 4
           flake_attempts: 3
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
@@ -197,7 +184,7 @@ jobs:
         id: race-check
         uses: ./.github/actions/check-race-condition
         with:
-          stack: ${{ env.STACK }}
+          stack: ${{ vars.STACK }}
           owner: ${{ github.repository_owner }}
           current_version: ${{ needs.resolve-inputs.outputs.version }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -216,9 +203,9 @@ jobs:
       - name: Cleanup deployments
         uses: ./.github/actions/cleanup-deployments
         with:
-          stack: ${{ env.STACK }}
-          bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
-          bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
+          stack: ${{ vars.STACK }}
+          bbl_state_repo: ${{ vars.BUILDPACKS_ENVS_REPO }}
+          bbl_state_branch: ${{ vars.DEFAULT_BRANCH }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
         env:
           GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
@@ -239,12 +226,12 @@ jobs:
       - name: Destroy test environment
         uses: ./.github/actions/bbl-destroy
         with:
-          env_name: ${{ env.STACK }}
+          env_name: ${{ vars.STACK }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
-          bbl_state_repo: ${{ env.BUILDPACKS_ENVS_REPO }}
-          bbl_state_branch: ${{ env.DEFAULT_BRANCH }}
-          gcp_zone: ${{ env.GCP_ZONE }}
-          gcp_region: ${{ env.GCP_REGION }}
+          bbl_state_repo: ${{ vars.BUILDPACKS_ENVS_REPO }}
+          bbl_state_branch: ${{ vars.DEFAULT_BRANCH }}
+          gcp_zone: ${{ vars.GCP_ZONE }}
+          gcp_region: ${{ vars.GCP_REGION }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
         env:
           GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}

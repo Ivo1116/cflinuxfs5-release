@@ -23,7 +23,7 @@ runs:
       run: |
         set -euo pipefail
 
-        STACK="${{ env.STACK }}"
+        STACK="${{ vars.STACK }}"
         VERSION="${{ inputs.version }}"
         UPLOAD_TYPE="${{ inputs.upload_type }}"
         BUCKET="${{ inputs.bucket_name }}"
@@ -86,7 +86,7 @@ runs:
       run: |
         set -euo pipefail
         
-        STACK="${{ env.STACK }}"
+        STACK="${{ vars.STACK }}"
         VERSION="${{ inputs.version }}"
         UPLOAD_TYPE="${{ inputs.upload_type }}"
         BUCKET="${{ inputs.bucket_name }}"
