@@ -126,6 +126,8 @@ jobs:
           ops_file_repo: ${{ vars.OPS_FILE_REPO }}
           ops_file: ${{ vars.OPS_FILE }}
           bbl_state_deploy_key: ${{ secrets.BBL_STATE_DEPLOY_KEY }}
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
   run-cats:
     name: Run Cloud Foundry Acceptance Tests
